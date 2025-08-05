@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Stepwise Studio Test</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+
+    #results {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      margin-top: 20px;
+    }
+
+    .video-card {
+      border: 1px solid #ccc;
+      padding: 10px;
+      width: 200px;
+    }
+
+    .video-card img {
+      width: 100%;
+      height: auto;
+    }
+
+    #videoPlayer {
+      margin-top: 30px;
+      width: 720px;
+      max-width: 100%;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Stepwise Studio Test</h1>
+
+  <form id="searchForm">
+    <input type="text" id="searchInput" placeholder="Search for a dance tutorial..." required />
+    <button type="submit">Search</button>
+  </form>
+
+  <div id="results"></div>
+
+  <video id="videoPlayer" controls></video>
+
+  <script>
+    document.getElementById('searchForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const query = document.getElementById('searchInput').value;
+      await searchYouTube(query);
+    });
+
+    async function searchYouTube(query) {
+      try {
+        const response = await fetch(`/youtube-search?q=${encodeURIComponent(query)}`);
+        const data = await response.json();
+
+        if (!response.ok) throw new Error(data.error || 'Search failed');
+
+        renderResults(data.items);
+      } catch (err) {
+        alert('❌ ' + err.message);
+      }
+    }
+
+    function renderResults(videos) {
+      const container = document.getElementById('results');
+      container.innerHTML = '';
+
+      videos.forEach(video => {
+        const { videoId } = video.id;
+        const { title, thumbnails } = video.snippet;
+
+        const div = document.createElement('div');
+        div.className = 'video-card';
+        div.innerHTML = `
+          <img src="${thumbnails.medium.url}" alt="${title}">
+          <p><strong>${title}</strong></p>
+          <button onclick="downloadAndPlay('${videoId}')">Download & Play</button>
+        `;
+        container.appendChild(div);
+      });
+    }
+
+    async function downloadAndPlay(videoId) {
+      try {
+        const res = await fetch(`/download?id=${videoId}`);
+        const data = await res.json();
+
+        if (!res.ok) throw new Error(data.error || 'Download failed');
+
+        const videoPlayer = document.getElementById('videoPlayer');
+        videoPlayer.src = data.url;
+        videoPlayer.play();
+      } catch (err) {
+        alert('❌ ' + err.message);
+      }
+    }
+  </script>
+
+</body>
+</html>
