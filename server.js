@@ -339,20 +339,13 @@ app.get('/download', async (req, res) => {
       console.log('⚠️ First download attempt failed, trying with alternate settings...');
       
       // Second attempt with different extractor arguments
-      const fallbackArgs = [
-        '-f', 'best[height<=720]/best',
-        '--merge-output-format', 'mp4',
-        '--no-playlist',
-        '--socket-timeout', '45',
-        '--retries', '5',
-        '--max-filesize', '100M',
+      const args = [
+        '--format', 'best[height<=480]',
+        '--user-agent', 'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.165 Mobile Safari/537.36',
+        '--referer', 'https://www.youtube-nocookie.com/embed/',
+        '--cookies', process.env.YT_COOKIE_FILE,
         '-o', outputTemplate,
-        '--user-agent', 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        '--extractor-args', 'youtube:player_client=android',
-        '--sleep-interval', '2',
-        '--max-sleep-interval', '5',
-        '--no-warnings',
-        videoUrl
+        `https://youtube.com/watch?v=${videoId}`
       ];
       
       try {
