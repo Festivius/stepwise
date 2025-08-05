@@ -115,7 +115,6 @@ app.get('/download', async (req, res) => {
 
   const outputPath = path.join(VIDEOS_DIR, `${videoId}.mp4`);
 
-  // Check if video already exists
   if (fs.existsSync(outputPath)) {
     console.log('✅ Video already cached:', videoId);
     return res.json({ url: `/videos/${videoId}.mp4` });
@@ -134,7 +133,6 @@ app.get('/download', async (req, res) => {
       retries: 3
     });
 
-    // Verify file was created and has content
     if (!fs.existsSync(outputPath)) {
       console.error('❌ Video file not created:', videoId);
       return res.status(500).json({ error: 'Video file not created' });
