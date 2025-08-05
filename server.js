@@ -4,9 +4,16 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 const axios = require('axios');
-const youtubedl = require('youtube-dl-exec').default;
+const { execFile } = require('child_process');
+const { promisify } = require('util');
 
+const execFileAsync = promisify(execFile);
 const app = express();
+
+// Configure yt-dlp binary path
+const YT_DLP_PATH = process.env.NODE_ENV === 'production' 
+  ? path.join(__dirname, 'bin', 'yt-dlp')  // Production path on Render
+  : 'yt-dlp'; // Local development (assumes yt-dlp is in PATH)
 
 // Middleware
 app.use(cors());
@@ -18,6 +25,36 @@ const VIDEOS_DIR = path.join(__dirname, 'videos');
 console.log('🎬 Stepwise Studio starting...');
 console.log('📁 Videos directory:', VIDEOS_DIR);
 console.log('🌍 Environment:', process.env.NODE_ENV || 'development');
+console.log('📺 yt-dlp path:', YT_DLP_PATH);
+
+// Check if yt-dlp binary exists
+async function checkYtDlp() {
+  try {
+    if (process.env.NODE_ENV === 'production') {
+      if (fs.existsSync(YT_DLP_PATH)) {
+        console.log('✅ yt-dlp binary found at:', YT_DLP_PATH);
+        // Test the binary
+        const { stdout } = await execFileAsync(YT_DLP_PATH, ['--version'], { timeout: 5000 });
+        console.log('📺 yt-dlp version:', stdout.trim());
+      } else {
+        console.log('❌ yt-dlp binary not found at:', YT_DLP_PATH);
+      }
+    } else {
+      // For local development, check if yt-dlp is in PATH
+      try {
+        const { stdout } = await execFileAsync('yt-dlp', ['--version'], { timeout: 5000 });
+        console.log('📺 yt-dlp version (local):', stdout.trim());
+      } catch (err) {
+        console.log('❌ yt-dlp not found in PATH (local development)');
+      }
+    }
+  } catch (error) {
+    console.log('❌ Error checking yt-dlp:', error.message);
+  }
+}
+
+// Check yt-dlp availability on startup
+checkYtDlp();
 
 // Ensure videos directory exists
 if (!fs.existsSync(VIDEOS_DIR)) {
@@ -40,6 +77,8 @@ app.get('/health', (req, res) => {
     status: 'healthy', 
     timestamp: new Date().toISOString(),
     videosDir: fs.existsSync(VIDEOS_DIR),
+    ytDlpBinary: fs.existsSync(YT_DLP_PATH),
+    environment: process.env.NODE_ENV || 'development',
     diskSpace: getDiskSpace()
   });
 });
@@ -106,6 +145,56 @@ app.get('/youtube-search', async (req, res) => {
   }
 });
 
+// Custom yt-dlp wrapper function
+async function downloadVideoWithYtDlp(videoUrl, outputTemplate) {
+  const args = [
+    // Format selection - prefer 720p or lower, mp4 format
+    '-f', 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best[ext=mp4]/best',
+    // Output format
+    '--merge-output-format', 'mp4',
+    // Don't download playlists
+    '--no-playlist',
+    // Timeout settings
+    '--socket-timeout', '30',
+    '--fragment-retries', '3',
+    '--retries', '3',
+    // File size limit
+    '--max-filesize', '100M',
+    // Output template
+    '-o', outputTemplate,
+    // Add user agent to avoid detection
+    '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+    // Add referer
+    '--referer', 'https://www.youtube.com/',
+    // Extract flat for faster processing
+    '--no-warnings',
+    // The video URL
+    videoUrl
+  ];
+
+  console.log('🔧 Running yt-dlp with args:', args.join(' '));
+
+  try {
+    const { stdout, stderr } = await execFileAsync(YT_DLP_PATH, args, {
+      timeout: 300000, // 5 minutes timeout
+      maxBuffer: 1024 * 1024 * 10, // 10MB buffer
+      cwd: __dirname
+    });
+    
+    console.log('📺 yt-dlp stdout:', stdout);
+    if (stderr) {
+      console.log('📺 yt-dlp stderr:', stderr);
+    }
+    
+    return { success: true, stdout, stderr };
+  } catch (error) {
+    console.error('❌ yt-dlp execution error:', error.message);
+    if (error.stdout) console.error('stdout:', error.stdout);
+    if (error.stderr) console.error('stderr:', error.stderr);
+    throw new Error(`yt-dlp failed: ${error.message}`);
+  }
+}
+
 // Video download endpoint
 app.get('/download', async (req, res) => {
   const videoId = req.query.id;
@@ -113,9 +202,21 @@ app.get('/download', async (req, res) => {
     return res.status(400).json({ error: 'Missing video ID' });
   }
 
-  const outputPath = path.join(VIDEOS_DIR, `${videoId}.mp4`);
+  // Check if yt-dlp binary exists
+  if (!fs.existsSync(YT_DLP_PATH)) {
+    console.error('❌ yt-dlp binary not found at:', YT_DLP_PATH);
+    return res.status(500).json({ 
+      error: 'Video download service not available',
+      details: `yt-dlp binary not found at ${YT_DLP_PATH}`
+    });
+  }
 
-  if (fs.existsSync(outputPath)) {
+  // Define output paths
+  const outputTemplate = path.join(VIDEOS_DIR, `${videoId}.%(ext)s`);
+  const finalVideoPath = path.join(VIDEOS_DIR, `${videoId}.mp4`);
+
+  // Check if video already exists
+  if (fs.existsSync(finalVideoPath)) {
     console.log('✅ Video already cached:', videoId);
     return res.json({ url: `/videos/${videoId}.mp4` });
   }
@@ -123,25 +224,35 @@ app.get('/download', async (req, res) => {
   console.log('⬇️ Starting download for video:', videoId);
 
   try {
-    await youtubedl(`https://www.youtube.com/watch?v=${videoId}`, {
-      output: outputPath,
-      format: 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best',
-      mergeOutputFormat: 'mp4',
-      noPlaylist: true,
-      maxFilesize: '100M',
-      socketTimeout: 30,
-      retries: 3
-    });
+    const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    
+    // Download the video
+    await downloadVideoWithYtDlp(videoUrl, outputTemplate);
 
-    if (!fs.existsSync(outputPath)) {
-      console.error('❌ Video file not created:', videoId);
-      return res.status(500).json({ error: 'Video file not created' });
+    // Check if the downloaded file exists
+    if (!fs.existsSync(finalVideoPath)) {
+      // Sometimes the file might have a different extension, check for any file with the videoId
+      const files = fs.readdirSync(VIDEOS_DIR);
+      const downloadedFile = files.find(file => file.startsWith(videoId));
+      
+      if (downloadedFile) {
+        const downloadedPath = path.join(VIDEOS_DIR, downloadedFile);
+        // If it's not already .mp4, rename it
+        if (downloadedFile !== `${videoId}.mp4`) {
+          fs.renameSync(downloadedPath, finalVideoPath);
+          console.log('📁 Renamed file from', downloadedFile, 'to', `${videoId}.mp4`);
+        }
+      } else {
+        console.error('❌ No video file created for:', videoId);
+        return res.status(500).json({ error: 'Video file not created after download' });
+      }
     }
 
-    const stats = fs.statSync(outputPath);
+    // Verify the file is not empty
+    const stats = fs.statSync(finalVideoPath);
     if (stats.size === 0) {
       console.error('❌ Video file is empty:', videoId);
-      fs.unlinkSync(outputPath);
+      fs.unlinkSync(finalVideoPath);
       return res.status(500).json({ error: 'Downloaded video file is empty' });
     }
 
@@ -150,13 +261,25 @@ app.get('/download', async (req, res) => {
 
   } catch (error) {
     console.error('❌ Download failed for', videoId);
-    console.error('Error:', error);
-    if (fs.existsSync(outputPath)) {
-      fs.unlinkSync(outputPath);
+    console.error('Error details:', error.message);
+    
+    // Clean up any partial files
+    try {
+      const files = fs.readdirSync(VIDEOS_DIR);
+      files.forEach(file => {
+        if (file.startsWith(videoId)) {
+          const filePath = path.join(VIDEOS_DIR, file);
+          fs.unlinkSync(filePath);
+          console.log('🗑️ Cleaned up partial file:', file);
+        }
+      });
+    } catch (cleanupError) {
+      console.error('❌ Cleanup error:', cleanupError.message);
     }
+    
     res.status(500).json({ 
       error: 'Failed to download video', 
-      details: error.message || error.toString() 
+      details: error.message
     });
   }
 });
@@ -217,4 +340,5 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`🔑 YouTube API configured: ${!!process.env.YOUTUBE_API_KEY}`);
   console.log(`📁 Videos directory: ${VIDEOS_DIR}`);
   console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`📺 yt-dlp binary path: ${YT_DLP_PATH}`);
 });
