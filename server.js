@@ -4,7 +4,7 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 const axios = require('axios');
-const youtubedl = require('youtube-dl-exec').raw; // use raw to get a promise for completion
+const youtubedl = require('youtube-dl-exec').default;
 
 const app = express();
 
