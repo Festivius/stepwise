@@ -27,34 +27,78 @@ console.log('📁 Videos directory:', VIDEOS_DIR);
 console.log('🌍 Environment:', process.env.NODE_ENV || 'development');
 console.log('📺 yt-dlp path:', YT_DLP_PATH);
 
-// Check if yt-dlp binary exists
+// Set up Python environment for yt-dlp in production
+function setupPythonEnvironment() {
+  if (process.env.NODE_ENV === 'production') {
+    const userPythonPath = path.join(process.env.HOME || '/opt/render', '.local', 'lib', 'python3.13', 'site-packages');
+    const currentPythonPath = process.env.PYTHONPATH || '';
+    process.env.PYTHONPATH = currentPythonPath ? `${userPythonPath}:${currentPythonPath}` : userPythonPath;
+    console.log('🐍 Python environment configured for production');
+  }
+}
+
+// Setup Python environment
+setupPythonEnvironment();
+
+// Check if yt-dlp binary exists and works
 async function checkYtDlp() {
   try {
     if (process.env.NODE_ENV === 'production') {
       if (fs.existsSync(YT_DLP_PATH)) {
         console.log('✅ yt-dlp binary found at:', YT_DLP_PATH);
-        // Test the binary
-        const { stdout } = await execFileAsync(YT_DLP_PATH, ['--version'], { timeout: 5000 });
-        console.log('📺 yt-dlp version:', stdout.trim());
+        
+        // Make sure it's executable
+        try {
+          fs.chmodSync(YT_DLP_PATH, 0o755);
+        } catch (chmodErr) {
+          console.log('⚠️ Could not set permissions on yt-dlp binary:', chmodErr.message);
+        }
+        
+        // Test the binary with proper environment
+        try {
+          const { stdout } = await execFileAsync(YT_DLP_PATH, ['--version'], { 
+            timeout: 10000,
+            env: {
+              ...process.env,
+              PYTHONPATH: process.env.PYTHONPATH,
+              PATH: process.env.PATH
+            }
+          });
+          console.log('📺 yt-dlp version:', stdout.trim());
+          return true;
+        } catch (testErr) {
+          console.log('❌ yt-dlp test failed:', testErr.message);
+          return false;
+        }
       } else {
         console.log('❌ yt-dlp binary not found at:', YT_DLP_PATH);
+        return false;
       }
     } else {
       // For local development, check if yt-dlp is in PATH
       try {
         const { stdout } = await execFileAsync('yt-dlp', ['--version'], { timeout: 5000 });
         console.log('📺 yt-dlp version (local):', stdout.trim());
+        return true;
       } catch (err) {
         console.log('❌ yt-dlp not found in PATH (local development)');
+        return false;
       }
     }
   } catch (error) {
     console.log('❌ Error checking yt-dlp:', error.message);
+    return false;
   }
 }
 
+// Global flag to track yt-dlp status
+let ytDlpWorking = false;
+
 // Check yt-dlp availability on startup
-checkYtDlp();
+checkYtDlp().then(working => {
+  ytDlpWorking = working;
+  console.log(`📺 yt-dlp status: ${working ? 'Working' : 'Not working'}`);
+});
 
 // Ensure videos directory exists
 if (!fs.existsSync(VIDEOS_DIR)) {
@@ -78,7 +122,9 @@ app.get('/health', (req, res) => {
     timestamp: new Date().toISOString(),
     videosDir: fs.existsSync(VIDEOS_DIR),
     ytDlpBinary: fs.existsSync(YT_DLP_PATH),
+    ytDlpWorking: ytDlpWorking,
     environment: process.env.NODE_ENV || 'development',
+    pythonPath: process.env.PYTHONPATH,
     diskSpace: getDiskSpace()
   });
 });
@@ -178,7 +224,12 @@ async function downloadVideoWithYtDlp(videoUrl, outputTemplate) {
     const { stdout, stderr } = await execFileAsync(YT_DLP_PATH, args, {
       timeout: 300000, // 5 minutes timeout
       maxBuffer: 1024 * 1024 * 10, // 10MB buffer
-      cwd: __dirname
+      cwd: __dirname,
+      env: {
+        ...process.env,
+        PYTHONPATH: process.env.PYTHONPATH,
+        PATH: process.env.PATH
+      }
     });
     
     console.log('📺 yt-dlp stdout:', stdout);
@@ -202,12 +253,12 @@ app.get('/download', async (req, res) => {
     return res.status(400).json({ error: 'Missing video ID' });
   }
 
-  // Check if yt-dlp binary exists
-  if (!fs.existsSync(YT_DLP_PATH)) {
-    console.error('❌ yt-dlp binary not found at:', YT_DLP_PATH);
+  // Check if yt-dlp is working
+  if (!ytDlpWorking) {
+    console.error('❌ yt-dlp is not working properly');
     return res.status(500).json({ 
       error: 'Video download service not available',
-      details: `yt-dlp binary not found at ${YT_DLP_PATH}`
+      details: 'yt-dlp binary is not functioning properly'
     });
   }
 
@@ -341,4 +392,5 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`📁 Videos directory: ${VIDEOS_DIR}`);
   console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`📺 yt-dlp binary path: ${YT_DLP_PATH}`);
+  console.log(`🐍 Python path: ${process.env.PYTHONPATH || 'Not set'}`);
 });
