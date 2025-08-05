@@ -252,7 +252,6 @@ async function downloadVideoWithYtDlp(videoUrl, outputTemplate) {
     // Add to arguments array
     '--throttled-rate', '100K',
     '--limit-rate', '2M',
-    '--random-wait',
     
     // Disable warnings and add sleep to avoid rate limiting
     '--no-warnings',
