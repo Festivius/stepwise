@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "postinstall": "node scripts/setup-puppeteer.js"
+    "postinstall": "node puppeteer.js"
   },
   "dependencies": {
     "axios": "^1.6.2",
