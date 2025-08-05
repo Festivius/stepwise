@@ -1,3 +1,8 @@
+// Add this at the TOP of server.js
+if (process.env.NODE_ENV === 'production') {
+  process.env.PATH = `${process.env.PATH}:/opt/render/project/poetry/bin`;
+}
+
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -6,6 +11,7 @@ const fs = require('fs');
 const axios = require('axios');
 const { execFile } = require('child_process');
 const { promisify } = require('util');
+const COOKIES_PATH = path.join(__dirname, 'cookies.txt');
 
 const execFileAsync = promisify(execFile);
 const app = express();
@@ -214,8 +220,8 @@ app.get('/youtube-search', async (req, res) => {
 async function downloadVideoWithYtDlp(videoUrl, outputTemplate) {
   const args = [
     // Format selection - prefer 720p or lower, mp4 format
-    '-f', 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best[ext=mp4]/best',
-    // Output format
+    '--cookies', COOKIES_PATH,
+    '--format', 'bestvideo[height<=480]+bestaudio/best[height<=480]',
     '--merge-output-format', 'mp4',
     // Don't download playlists
     '--no-playlist',
@@ -242,6 +248,11 @@ async function downloadVideoWithYtDlp(videoUrl, outputTemplate) {
     '--add-header', 'DNT:1',
     '--add-header', 'Connection:keep-alive',
     '--add-header', 'Upgrade-Insecure-Requests:1',
+
+    // Add to arguments array
+    '--throttled-rate', '100K',
+    '--limit-rate', '2M',
+    '--random-wait',
     
     // Disable warnings and add sleep to avoid rate limiting
     '--no-warnings',
