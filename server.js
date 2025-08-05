@@ -94,6 +94,25 @@ async function checkYtDlp() {
 // Global flag to track yt-dlp status
 let ytDlpWorking = false;
 
+// Rate limiting for downloads
+const downloadQueue = new Map();
+const DOWNLOAD_COOLDOWN = 5000; // 5 seconds between downloads per IP
+
+function checkDownloadRateLimit(ip) {
+  const now = Date.now();
+  const lastDownload = downloadQueue.get(ip) || 0;
+  
+  if (now - lastDownload < DOWNLOAD_COOLDOWN) {
+    return {
+      allowed: false,
+      timeRemaining: Math.ceil((DOWNLOAD_COOLDOWN - (now - lastDownload)) / 1000)
+    };
+  }
+  
+  downloadQueue.set(ip, now);
+  return { allowed: true };
+}
+
 // Check yt-dlp availability on startup
 checkYtDlp().then(working => {
   ytDlpWorking = working;
@@ -208,12 +227,27 @@ async function downloadVideoWithYtDlp(videoUrl, outputTemplate) {
     '--max-filesize', '100M',
     // Output template
     '-o', outputTemplate,
-    // Add user agent to avoid detection
-    '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-    // Add referer
+    
+    // Enhanced anti-bot detection measures
+    '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     '--referer', 'https://www.youtube.com/',
-    // Extract flat for faster processing
+    
+    // Use different extractors to avoid bot detection
+    '--extractor-args', 'youtube:player_client=ios,web',
+    
+    // Add headers to mimic real browser
+    '--add-header', 'Accept-Language:en-US,en;q=0.9',
+    '--add-header', 'Accept:text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+    '--add-header', 'Accept-Encoding:gzip, deflate, br',
+    '--add-header', 'DNT:1',
+    '--add-header', 'Connection:keep-alive',
+    '--add-header', 'Upgrade-Insecure-Requests:1',
+    
+    // Disable warnings and add sleep to avoid rate limiting
     '--no-warnings',
+    '--sleep-interval', '1',
+    '--max-sleep-interval', '3',
+    
     // The video URL
     videoUrl
   ];
@@ -246,11 +280,22 @@ async function downloadVideoWithYtDlp(videoUrl, outputTemplate) {
   }
 }
 
-// Video download endpoint
+// Video download endpoint with enhanced bot detection handling
 app.get('/download', async (req, res) => {
   const videoId = req.query.id;
   if (!videoId) {
     return res.status(400).json({ error: 'Missing video ID' });
+  }
+
+  // Rate limiting check
+  const clientIP = req.ip || req.connection.remoteAddress || 'unknown';
+  const rateCheck = checkDownloadRateLimit(clientIP);
+  
+  if (!rateCheck.allowed) {
+    return res.status(429).json({ 
+      error: 'Too many download requests',
+      details: `Please wait ${rateCheck.timeRemaining} seconds before downloading another video`
+    });
   }
 
   // Check if yt-dlp is working
@@ -277,8 +322,76 @@ app.get('/download', async (req, res) => {
   try {
     const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
     
-    // Download the video
-    await downloadVideoWithYtDlp(videoUrl, outputTemplate);
+    // First attempt with standard settings
+    try {
+      await downloadVideoWithYtDlp(videoUrl, outputTemplate);
+    } catch (firstError) {
+      console.log('⚠️ First download attempt failed, trying with alternate settings...');
+      
+      // Second attempt with different extractor arguments
+      const fallbackArgs = [
+        '-f', 'best[height<=720]/best',
+        '--merge-output-format', 'mp4',
+        '--no-playlist',
+        '--socket-timeout', '45',
+        '--retries', '5',
+        '--max-filesize', '100M',
+        '-o', outputTemplate,
+        '--user-agent', 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        '--extractor-args', 'youtube:player_client=android',
+        '--sleep-interval', '2',
+        '--max-sleep-interval', '5',
+        '--no-warnings',
+        videoUrl
+      ];
+      
+      try {
+        const { stdout, stderr } = await execFileAsync(YT_DLP_PATH, fallbackArgs, {
+          timeout: 300000,
+          maxBuffer: 1024 * 1024 * 10,
+          cwd: __dirname,
+          env: {
+            ...process.env,
+            PATH: process.env.PATH
+          }
+        });
+        
+        console.log('📺 Fallback yt-dlp stdout:', stdout);
+        if (stderr) console.log('📺 Fallback yt-dlp stderr:', stderr);
+        
+      } catch (secondError) {
+        console.log('⚠️ Second download attempt failed, trying final fallback...');
+        
+        // Third attempt with mobile user agent and different approach
+        const finalFallbackArgs = [
+          '-f', 'worst[height<=480]/worst',
+          '--no-playlist',
+          '--socket-timeout', '60',
+          '--retries', '10',
+          '--max-filesize', '50M',
+          '-o', outputTemplate,
+          '--user-agent', 'com.google.android.youtube/17.31.35 (Linux; U; Android 11) gzip',
+          '--extractor-args', 'youtube:player_client=android_music',
+          '--sleep-interval', '3',
+          '--max-sleep-interval', '8',
+          '--no-warnings',
+          videoUrl
+        ];
+        
+        const { stdout, stderr } = await execFileAsync(YT_DLP_PATH, finalFallbackArgs, {
+          timeout: 300000,
+          maxBuffer: 1024 * 1024 * 10,
+          cwd: __dirname,
+          env: {
+            ...process.env,
+            PATH: process.env.PATH
+          }
+        });
+        
+        console.log('📺 Final fallback yt-dlp stdout:', stdout);
+        if (stderr) console.log('📺 Final fallback yt-dlp stderr:', stderr);
+      }
+    }
 
     // Check if the downloaded file exists
     if (!fs.existsSync(finalVideoPath)) {
@@ -295,7 +408,10 @@ app.get('/download', async (req, res) => {
         }
       } else {
         console.error('❌ No video file created for:', videoId);
-        return res.status(500).json({ error: 'Video file not created after download' });
+        return res.status(500).json({ 
+          error: 'Video temporarily unavailable',
+          details: 'This video may be restricted or require authentication. Please try a different video or try again later.'
+        });
       }
     }
 
@@ -304,7 +420,10 @@ app.get('/download', async (req, res) => {
     if (stats.size === 0) {
       console.error('❌ Video file is empty:', videoId);
       fs.unlinkSync(finalVideoPath);
-      return res.status(500).json({ error: 'Downloaded video file is empty' });
+      return res.status(500).json({ 
+        error: 'Downloaded video file is empty',
+        details: 'The video may be corrupted or unavailable. Please try again.'
+      });
     }
 
     console.log('✅ Download completed:', videoId, `(${(stats.size / 1024 / 1024).toFixed(2)}MB)`);
@@ -328,9 +447,24 @@ app.get('/download', async (req, res) => {
       console.error('❌ Cleanup error:', cleanupError.message);
     }
     
+    // Provide user-friendly error messages based on the error type
+    let userMessage = 'Failed to download video';
+    let userDetails = 'Please try again or select a different video';
+    
+    if (error.message.includes('Sign in to confirm')) {
+      userMessage = 'Video temporarily unavailable';
+      userDetails = 'YouTube is currently blocking automated downloads. Please try again in a few minutes or select a different video.';
+    } else if (error.message.includes('Video unavailable')) {
+      userMessage = 'Video not accessible';
+      userDetails = 'This video may be private, deleted, or restricted in your region.';
+    } else if (error.message.includes('timeout')) {
+      userMessage = 'Download timeout';
+      userDetails = 'The video took too long to download. Please try a shorter video or try again later.';
+    }
+    
     res.status(500).json({ 
-      error: 'Failed to download video', 
-      details: error.message
+      error: userMessage, 
+      details: userDetails
     });
   }
 });
