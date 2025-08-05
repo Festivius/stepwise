@@ -4,7 +4,7 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 const axios = require('axios');
-const youtubedl = require('youtube-dl-exec');
+const youtubedl = require('@distube/yt-dlp');
 
 const app = express();
 
