@@ -1,10 +1,10 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const { exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const axios = require('axios');
+const youtubedl = require('youtube-dl-exec').raw; // use raw to get a promise for completion
 
 const app = express();
 
@@ -107,7 +107,7 @@ app.get('/youtube-search', async (req, res) => {
 });
 
 // Video download endpoint
-app.get('/download', (req, res) => {
+app.get('/download', async (req, res) => {
   const videoId = req.query.id;
   if (!videoId) {
     return res.status(400).json({ error: 'Missing video ID' });
@@ -123,41 +123,16 @@ app.get('/download', (req, res) => {
 
   console.log('⬇️ Starting download for video:', videoId);
 
-  // Enhanced yt-dlp command with better error handling
-  const ytDlpCmd = [
-    'yt-dlp',
-    '--format', '"bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best"',
-    '--merge-output-format', 'mp4',
-    '--no-playlist',
-    '--max-filesize', '100M', // Limit file size to 100MB
-    '--socket-timeout', '30',
-    '--retries', '3',
-    '--output', `"${outputPath}"`,
-    `"https://www.youtube.com/watch?v=${videoId}"`
-  ].join(' ');
-
-  console.log('🎬 Executing:', ytDlpCmd);
-
-  const downloadProcess = exec(ytDlpCmd, {
-    timeout: 300000, // 5 minute timeout
-    maxBuffer: 1024 * 1024 * 10 // 10MB buffer
-  }, (error, stdout, stderr) => {
-    if (error) {
-      console.error('❌ Download failed for', videoId);
-      console.error('Error:', error.message);
-      console.error('Stderr:', stderr);
-      
-      // Clean up partial file
-      if (fs.existsSync(outputPath)) {
-        fs.unlinkSync(outputPath);
-      }
-      
-      return res.status(500).json({ 
-        error: 'Failed to download video',
-        details: stderr || error.message,
-        videoId: videoId
-      });
-    }
+  try {
+    await youtubedl(`https://www.youtube.com/watch?v=${videoId}`, {
+      output: outputPath,
+      format: 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best',
+      mergeOutputFormat: 'mp4',
+      noPlaylist: true,
+      maxFilesize: '100M',
+      socketTimeout: 30,
+      retries: 3
+    });
 
     // Verify file was created and has content
     if (!fs.existsSync(outputPath)) {
@@ -174,13 +149,18 @@ app.get('/download', (req, res) => {
 
     console.log('✅ Download completed:', videoId, `(${(stats.size / 1024 / 1024).toFixed(2)}MB)`);
     res.json({ url: `/videos/${videoId}.mp4` });
-  });
 
-  // Handle process errors
-  downloadProcess.on('error', (error) => {
-    console.error('❌ Process error:', error);
-    res.status(500).json({ error: 'Download process failed', details: error.message });
-  });
+  } catch (error) {
+    console.error('❌ Download failed for', videoId);
+    console.error('Error:', error);
+    if (fs.existsSync(outputPath)) {
+      fs.unlinkSync(outputPath);
+    }
+    res.status(500).json({ 
+      error: 'Failed to download video', 
+      details: error.message || error.toString() 
+    });
+  }
 });
 
 // Serve video files with proper headers
@@ -219,7 +199,6 @@ setInterval(cleanupOldVideos, 60 * 60 * 1000);
 
 // Catch-all handler for SPA routing
 app.get('*', (req, res) => {
-  // Don't serve index.html for API routes
   if (req.path.startsWith('/api/') || req.path.startsWith('/videos/')) {
     return res.status(404).json({ error: 'Not found' });
   }
