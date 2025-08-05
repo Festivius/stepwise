@@ -351,7 +351,8 @@
         opacity: 1;
       }
 
-      .playback-bar-container {
+      /* NEW: Progress container for bar and handles */
+      .progress-container {
         position: absolute;
         bottom: 60px;
         left: 20px;
@@ -363,17 +364,17 @@
         display: flex;
         align-items: center;
       }
-
+      
       .playback-bar {
         height: 5px;
         background: rgba(255, 255, 255, 0.2);
         border-radius: 3px;
-        position: relative;
         width: 100%;
+        position: relative;
         transition: height 0.2s ease;
       }
 
-      .playback-bar-container:hover .playback-bar {
+      .progress-container:hover .playback-bar {
         height: 8px;
       }
 
@@ -400,7 +401,7 @@
         box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
       }
 
-      .playback-bar-container:hover .playback-thumb {
+      .progress-container:hover .playback-thumb {
         opacity: 1;
       }
 
@@ -413,14 +414,15 @@
         box-shadow: 0 0 5px rgba(138, 155, 110, 0.3); /* Updated shadow */
       }
 
+      /* UPDATED: Loop handle positioning */
       .loop-handle {
         position: absolute;
-        top: 50%;
+        top: 0;
         width: 6px;
         height: 30px;
-        background: #8a9b6e; /* Desaturated green */
+        background: #8a9b6e;
         border-radius: 3px;
-        transform: translate(-50%, -50%);
+        transform: translateX(-50%);
         cursor: ew-resize;
         z-index: 40;
         box-shadow: 0 0 8px rgba(0, 0, 0, 0.8);
@@ -669,7 +671,7 @@
         padding: 60px 20px 20px 20px;
       }
 
-      .fullscreen .playback-bar-container {
+      .fullscreen .progress-container {
         bottom: 70px;
       }
 
@@ -1074,18 +1076,19 @@
           </div>
           
           <div class="controls-overlay">
-            <div class="playback-bar-container">
+            <!-- NEW: Progress container with handles moved outside -->
+            <div class="progress-container">
               <div class="playback-bar">
                 <div class="loop-range" id="loopRange"></div>
                 <div class="playback-progress" id="playbackProgress">
                   <div class="playback-thumb" id="playbackThumb"></div>
                 </div>
-                <div class="loop-handle start" id="loopStartHandle">
-                  <span class="tooltip">Loop Start</span>
-                </div>
-                <div class="loop-handle end" id="loopEndHandle">
-                  <span class="tooltip">Loop End</span>
-                </div>
+              </div>
+              <div class="loop-handle start" id="loopStartHandle">
+                <span class="tooltip">Loop Start</span>
+              </div>
+              <div class="loop-handle end" id="loopEndHandle">
+                <span class="tooltip">Loop End</span>
               </div>
             </div>
             
@@ -1322,7 +1325,7 @@
     const saveNotification = document.getElementById('saveNotification');
     
     // Playback bar elements
-    const playbackBarContainer = document.querySelector('.playback-bar-container');
+    const progressContainer = document.querySelector('.progress-container');
     const playbackBar = document.querySelector('.playback-bar');
     const playbackProgress = document.getElementById('playbackProgress');
     const currentTimeLabel = document.getElementById('currentTimeLabel');
@@ -1848,13 +1851,20 @@
     // Update loop range display
     function updateLoopRangeDisplay() {
       if (video.duration) {
-        const startPercent = (loopStartTime / video.duration) * 100;
-        const endPercent = (loopEndTime / video.duration) * 100;
-        loopRange.style.left = `${startPercent}%`;
-        loopRange.style.width = `${endPercent - startPercent}%`;
+        const startPercent = Math.max(0, (loopStartTime / video.duration) * 100);
+        const endPercent = Math.min(100, (loopEndTime / video.duration) * 100);
         
-        loopStartHandle.style.left = `${startPercent}%`;
-        loopEndHandle.style.left = `${endPercent}%`;
+        // Position the loop range
+        loopRange.style.left = `${startPercent}%`;
+        loopRange.style.width = `${Math.max(0, endPercent - startPercent)}%`;
+        
+        // Position handles with bounds checking
+        loopStartHandle.style.left = `${startPercent-100}%`;
+        loopEndHandle.style.left = `${endPercent-100}%`;
+        
+        // Ensure handles are visible
+        loopStartHandle.style.display = 'block';
+        loopEndHandle.style.display = 'block';
       }
     }
     
@@ -1935,9 +1945,10 @@
     // Playback bar functionality
     video.addEventListener('loadedmetadata', () => {
       durationLabel.textContent = formatTime(video.duration);
-      // Reset loop times when a new video loads
+      // Reset loop times when a new video loads with proper bounds
       loopStartTime = 0;
-      loopEndTime = Math.min(video.duration, 10);
+      loopEndTime = Math.min(video.duration * 0.95, 10); // Don't go to 100% of duration
+      
       if (isLoopMode) {
         updateLoopRangeDisplay();
         updateLoopIndicator();
@@ -1952,7 +1963,7 @@
     });
     
     // Progress bar click for seeking
-    playbackBarContainer.addEventListener('mousedown', (e) => {
+    progressContainer.addEventListener('mousedown', (e) => {
       // Prevent seeking when dragging loop handles
       if (isDraggingLoopHandle) return;
       
@@ -2008,8 +2019,8 @@
       
       const rect = playbackBar.getBoundingClientRect();
       const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
-      const percent = x / rect.width;
-      const time = percent * video.duration;
+      const percent = (x / rect.width) * 100; // Convert to percentage
+      const time = (percent / 100) * video.duration;
       
       if (currentDragHandle === 'start') {
         loopStartTime = Math.max(0, Math.min(loopEndTime - 0.1, time));
