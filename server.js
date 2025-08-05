@@ -30,10 +30,10 @@ console.log('📺 yt-dlp path:', YT_DLP_PATH);
 // Set up Python environment for yt-dlp in production
 function setupPythonEnvironment() {
   if (process.env.NODE_ENV === 'production') {
-    const userPythonPath = path.join(process.env.HOME || '/opt/render', '.local', 'lib', 'python3.13', 'site-packages');
-    const currentPythonPath = process.env.PYTHONPATH || '';
-    process.env.PYTHONPATH = currentPythonPath ? `${userPythonPath}:${currentPythonPath}` : userPythonPath;
-    console.log('🐍 Python environment configured for production');
+    // On Render with Poetry, the virtual environment is already activated
+    // We just need to ensure the current environment variables are preserved
+    console.log('🐍 Python environment configured for Poetry virtual environment');
+    console.log('🐍 Python executable:', process.env.VIRTUAL_ENV || 'System Python');
   }
 }
 
@@ -54,13 +54,13 @@ async function checkYtDlp() {
           console.log('⚠️ Could not set permissions on yt-dlp binary:', chmodErr.message);
         }
         
-        // Test the binary with proper environment
+        // Test the binary with Poetry virtual environment
         try {
           const { stdout } = await execFileAsync(YT_DLP_PATH, ['--version'], { 
             timeout: 10000,
             env: {
               ...process.env,
-              PYTHONPATH: process.env.PYTHONPATH,
+              // Poetry virtual environment variables are already set
               PATH: process.env.PATH
             }
           });
@@ -124,7 +124,7 @@ app.get('/health', (req, res) => {
     ytDlpBinary: fs.existsSync(YT_DLP_PATH),
     ytDlpWorking: ytDlpWorking,
     environment: process.env.NODE_ENV || 'development',
-    pythonPath: process.env.PYTHONPATH,
+    virtualEnv: process.env.VIRTUAL_ENV || 'Not set',
     diskSpace: getDiskSpace()
   });
 });
@@ -227,7 +227,7 @@ async function downloadVideoWithYtDlp(videoUrl, outputTemplate) {
       cwd: __dirname,
       env: {
         ...process.env,
-        PYTHONPATH: process.env.PYTHONPATH,
+        // Poetry virtual environment is already activated
         PATH: process.env.PATH
       }
     });
@@ -392,5 +392,5 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`📁 Videos directory: ${VIDEOS_DIR}`);
   console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`📺 yt-dlp binary path: ${YT_DLP_PATH}`);
-  console.log(`🐍 Python path: ${process.env.PYTHONPATH || 'Not set'}`);
+  console.log(`🐍 Virtual environment: ${process.env.VIRTUAL_ENV || 'Not set'}`);
 });

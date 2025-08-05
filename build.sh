@@ -22,10 +22,16 @@ fi
 echo "📁 Setting up yt-dlp binary..."
 chmod +x bin/yt-dlp
 
-# Install Python dependencies for yt-dlp
-echo "🐍 Installing Python dependencies..."
-pip3 install --user --upgrade pip
-pip3 install --user certifi urllib3 brotli mutagen pycryptodome websockets
+# Install Python dependencies for yt-dlp using Poetry
+echo "🐍 Installing Python dependencies with Poetry..."
+if [ -f "pyproject.toml" ]; then
+    echo "📦 Installing dependencies from pyproject.toml..."
+    poetry install --no-dev
+else
+    echo "📦 Creating temporary Poetry project for dependencies..."
+    poetry init --no-interaction --name stepwise-studio --version 1.0.0
+    poetry add certifi urllib3 brotli mutagen pycryptodome websockets
+fi
 
 # Test yt-dlp with Python path
 echo "🧪 Testing yt-dlp binary..."
