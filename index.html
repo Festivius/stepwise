@@ -1344,6 +1344,10 @@
     let currentDragHandle = null;
     let isFullscreen = false;
     let savedVideos = getCookie('savedVideos') || [];
+
+    // Speed control
+    const speeds = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2];
+    let currentSpeedIndex = 3; // 1x is default
     
     // Initialize
     loadUserPreferences();
@@ -1897,10 +1901,6 @@
       togglePlayPause();
       showPauseAnimation();
     });
-    
-    // Speed control
-    const speeds = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2];
-    let currentSpeedIndex = 3; // 1x is default
     
     speedBtn.addEventListener('click', () => {
       currentSpeedIndex = (currentSpeedIndex + 1) % speeds.length;
