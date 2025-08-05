@@ -1,21 +1,24 @@
 #!/bin/bash
 set -e
 
-# Install system dependencies
-apt-get update && apt-get install -y \
-  python3 \
-  python3-pip \
-  chromium \
-  ffmpeg
+# Create local bin directory
+mkdir -p bin
 
-# Install latest yt-dlp (critical fix)
-curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
-chmod a+rx /usr/local/bin/yt-dlp
-yt-dlp -U
+# Install system dependencies (note: may fail in read-only environments — consider removing this)
+# apt-get update && apt-get install -y \
+#   python3 \
+#   python3-pip \
+#   chromium \
+#   ffmpeg
+
+# Download latest yt-dlp into local bin directory
+curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o bin/yt-dlp
+chmod +x bin/yt-dlp
+./bin/yt-dlp -U
 
 # Install Node.js dependencies using Yarn
 yarn install
 
 # Install Python dependencies
-pip3 install poetry
-poetry install
+pip3 install --user poetry
+~/.local/bin/poetry install
