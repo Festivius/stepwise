@@ -12,6 +12,9 @@ const puppeteer = require('puppeteer-core');
 const execFileAsync = promisify(execFile);
 const app = express();
 
+const VIDEOS_DIR = path.join(__dirname, 'videos');
+const COOKIES_PATH = path.join(__dirname, 'cookies.txt');
+
 // Enhanced YT-DLP configuration with multiple fallback strategies
 const YT_DLP_PATH = process.env.NODE_ENV === 'production' 
   ? path.join(__dirname, 'bin', 'yt-dlp')
