@@ -1,9 +1,4 @@
-// Add this at the TOP of server.js
-if (process.env.NODE_ENV === 'production') {
-  process.env.PATH = `${process.env.PATH}:/opt/render/project/poetry/bin`;
-}
-
-require('dotenv').config();
+// Enhanced server.js with improved bot detection bypass
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -17,222 +12,285 @@ const puppeteer = require('puppeteer-core');
 const execFileAsync = promisify(execFile);
 const app = express();
 
-// Configure yt-dlp binary path
+// Enhanced YT-DLP configuration with multiple fallback strategies
 const YT_DLP_PATH = process.env.NODE_ENV === 'production' 
   ? path.join(__dirname, 'bin', 'yt-dlp')
   : 'yt-dlp';
 
-// Puppeteer configuration for Render
-const getPuppeteerConfig = async () => ({
-  args: [
-    ...chromium.args,
-    '--disable-gpu',
-    '--disable-software-rasterizer',
-    '--disable-dev-shm-usage',
-    '--single-process'
-  ],
-  executablePath: process.env.CHROMIUM_EXECUTABLE_PATH || await chromium.executablePath(),
-  headless: chromium.headless,
-  ignoreHTTPSErrors: true,
-  defaultViewport: {
-    width: 1366,
-    height: 768
-  },
-  timeout: 30000
-});
-
-// Simplified BrowserPool class for Render
-class BrowserPool {
+// Cookie management for bot detection bypass
+class CookieManager {
   constructor() {
-    this.browser = null;
+    this.cookiesPath = path.join(__dirname, 'youtube-cookies.txt');
+    this.lastCookieUpdate = 0;
+    this.cookieUpdateInterval = 30 * 60 * 1000; // 30 minutes
   }
 
-  async getBrowser() {
-    if (!this.browser || !this.browser.isConnected()) {
-      this.browser = await puppeteer.launch(await getPuppeteerConfig());
+  // Create realistic YouTube cookies
+  async generateFreshCookies() {
+    const browser = await puppeteer.launch(await getPuppeteerConfig());
+    
+    try {
+      const page = await browser.newPage();
       
-      const page = await this.browser.newPage();
+      // Set realistic browser fingerprints
       await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
       
-      // Basic stealth settings
-      await page.evaluateOnNewDocument(() => {
-        Object.defineProperty(navigator, 'webdriver', { get: () => false });
+      // Visit YouTube homepage to get initial cookies
+      await page.goto('https://www.youtube.com', {
+        waitUntil: 'networkidle2',
+        timeout: 30000
       });
+
+      // Wait a bit to let cookies settle
+      await page.waitForTimeout(3000);
+
+      // Get cookies from the page
+      const cookies = await page.cookies();
       
-      await page.close();
+      // Convert to Netscape cookie format for yt-dlp
+      let cookieString = '# Netscape HTTP Cookie File\n';
+      cookieString += '# This is a generated file! Do not edit.\n\n';
+      
+      cookies.forEach(cookie => {
+        const domain = cookie.domain.startsWith('.') ? cookie.domain : `.${cookie.domain}`;
+        const secure = cookie.secure ? 'TRUE' : 'FALSE';
+        const httpOnly = cookie.httpOnly ? 'TRUE' : 'FALSE';
+        const expiry = cookie.expires ? Math.floor(cookie.expires) : '0';
+        
+        cookieString += `${domain}\t${httpOnly}\t${cookie.path}\t${secure}\t${expiry}\t${cookie.name}\t${cookie.value}\n`;
+      });
+
+      // Write cookies to file
+      fs.writeFileSync(this.cookiesPath, cookieString);
+      this.lastCookieUpdate = Date.now();
+      
+      console.log('🍪 Fresh YouTube cookies generated');
+      return true;
+
+    } catch (error) {
+      console.error('❌ Cookie generation failed:', error.message);
+      return false;
+    } finally {
+      await browser.close();
     }
-    return this.browser;
   }
 
-  async closeAll() {
-    if (this.browser) {
-      try {
-        await this.browser.close();
-      } catch (err) {
-        console.error('Error closing browser:', err);
-      }
-      this.browser = null;
-    }
-  }
-}
-
-const browserPool = new BrowserPool();
-
-// Simplified YouTube URL extraction
-async function extractVideoUrlWithPuppeteer(videoId) {
-  let browser;
-  let page;
-  
-  try {
-    console.log('🤖 Starting enhanced Puppeteer extraction for:', videoId);
-    browser = await browserPool.getBrowser();
-    page = await browser.newPage();
-
-    // Set realistic browser fingerprints
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-    await page.setExtraHTTPHeaders({
-      'Accept-Language': 'en-US,en;q=0.9',
-      'Referer': 'https://www.youtube.com/'
-    });
-
-    // Bypass bot detection
-    await page.evaluateOnNewDocument(() => {
-      delete navigator.__proto__.webdriver;
-      Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3] });
-    });
-
-    // Navigate to YouTube with realistic delays
-    await page.goto(`https://www.youtube.com/watch?v=${videoId}`, {
-      waitUntil: 'networkidle2',
-      timeout: 30000
-    });
-
-    // Wait for important elements
-    await page.waitForSelector('video', { timeout: 15000 });
-    await page.waitForTimeout(2000 + Math.random() * 3000); // Random delay
-
-    // Extract video data from player response
-    const videoData = await page.evaluate(async () => {
-      try {
-        const scripts = Array.from(document.querySelectorAll('script'));
-        const playerScript = scripts.find(s => 
-          s.textContent.includes('ytInitialPlayerResponse')
-        );
-        
-        if (!playerScript) return null;
-        
-        const match = playerScript.textContent.match(
-          /ytInitialPlayerResponse\s*=\s*({.+?});/s
-        );
-        
-        if (!match) return null;
-        
-        const playerResponse = JSON.parse(match[1]);
-        const formats = [
-          ...(playerResponse.streamingData?.formats || []),
-          ...(playerResponse.streamingData?.adaptiveFormats || [])
-        ];
-        
-        // Filter for MP4 videos (non-audio)
-        const videoFormats = formats.filter(f => 
-          f.mimeType?.includes('video/mp4') && 
-          !f.mimeType?.includes('audio')
-        );
-        
-        // Sort by quality (360p, 480p, etc)
-        videoFormats.sort((a, b) => {
-          const qualityOrder = ['360p', '480p', '720p', '1080p'];
-          return qualityOrder.indexOf(a.qualityLabel) - qualityOrder.indexOf(b.qualityLabel);
-        });
-        
-        return {
-          title: document.title,
-          formats: videoFormats
-        };
-      } catch (e) {
-        console.error('Evaluation error:', e);
-        return null;
-      }
-    });
-
-    if (!videoData?.formats?.length) {
-      throw new Error('No playable formats found');
-    }
-
-    // Select the best available format
-    const selectedFormat = videoData.formats[0];
-    console.log('✅ Found video format:', selectedFormat.qualityLabel);
+  async ensureFreshCookies() {
+    const now = Date.now();
     
-    return {
-      url: selectedFormat.url,
-      title: videoData.title
-    };
-
-  } catch (error) {
-    console.error('❌ Enhanced Puppeteer extraction failed:', error.message);
-    throw error;
-  } finally {
-    if (page) await page.close().catch(console.error);
+    if (!fs.existsSync(this.cookiesPath) || 
+        (now - this.lastCookieUpdate) > this.cookieUpdateInterval) {
+      return await this.generateFreshCookies();
+    }
+    
+    return true;
   }
 }
 
-// Modified download function with simplified fallback
-async function downloadVideoWithFallbacks(videoId) {
-  const outputTemplate = path.join(VIDEOS_DIR, `${videoId}.%(ext)s`);
-  const finalVideoPath = path.join(VIDEOS_DIR, `${videoId}.mp4`);
+const cookieManager = new CookieManager();
 
-  // Try yt-dlp first with enhanced parameters
-  try {
-    console.log('🎯 Attempting yt-dlp download with enhanced parameters...');
-    await execFileAsync(YT_DLP_PATH, [
-      '--format', 'bestvideo[height<=480]+bestaudio/best[height<=480]',
-      '--throttled-rate', '100K',
-      '--sleep-interval', '5',
-      '--max-sleep-interval', '30',
-      '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+// Enhanced download strategies with multiple fallbacks
+const downloadStrategies = [
+  // Strategy 1: yt-dlp with fresh cookies and iOS client
+  async function strategyWithCookies(videoId, outputPath) {
+    console.log('🎯 Strategy 1: yt-dlp with fresh cookies and iOS client...');
+    
+    await cookieManager.ensureFreshCookies();
+    
+    const args = [
+      '--cookies', cookieManager.cookiesPath,
+      '--format', 'bestvideo[height<=480]+bestaudio/best[height<=480]/best',
+      '--merge-output-format', 'mp4',
+      '--extractor-args', 'youtube:player_client=ios,mweb,tv_embedded',
+      '--user-agent', 'com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X;)',
       '--referer', 'https://www.youtube.com/',
-      '--extractor-args', 'youtube:player_client=android,web',
+      '--add-header', 'Accept-Language:en-US,en;q=0.9',
+      '--socket-timeout', '30',
+      '--retries', '3',
+      '--fragment-retries', '5',
       '--no-warnings',
-      '-o', outputTemplate,
+      '--no-playlist',
+      '-o', outputPath,
       `https://www.youtube.com/watch?v=${videoId}`
-    ], {
-      timeout: 300000,
+    ];
+
+    await execFileAsync(YT_DLP_PATH, args, {
+      timeout: 180000,
       env: { ...process.env, PATH: process.env.PATH }
     });
     
-    if (fs.existsSync(finalVideoPath)) {
-      console.log('✅ yt-dlp download successful');
-      return { success: true, method: 'yt-dlp' };
-    }
-  } catch (ytDlpError) {
-    console.log('⚠️ yt-dlp failed:', ytDlpError.message);
-  }
+    return { success: true, method: 'yt-dlp-cookies-ios' };
+  },
 
-  // Fallback to enhanced Puppeteer method
-  if (process.env.ENABLE_PUPPETEER === 'true') {
+  // Strategy 2: yt-dlp with Android client (often bypasses restrictions)
+  async function strategyAndroidClient(videoId, outputPath) {
+    console.log('🎯 Strategy 2: yt-dlp with Android client...');
+    
+    const args = [
+      '--format', 'worst[height<=360]/best[height<=480]/best',
+      '--extractor-args', 'youtube:player_client=android,android_music,android_creator',
+      '--user-agent', 'com.google.android.youtube/18.11.34 (Linux; U; Android 11; en_US)',
+      '--add-header', 'X-YouTube-Client-Name:3',
+      '--add-header', 'X-YouTube-Client-Version:18.11.34',
+      '--socket-timeout', '30',
+      '--retries', '2',
+      '--no-warnings',
+      '--no-playlist',
+      '-o', outputPath,
+      `https://www.youtube.com/watch?v=${videoId}`
+    ];
+
+    await execFileAsync(YT_DLP_PATH, args, {
+      timeout: 120000,
+      env: { ...process.env, PATH: process.env.PATH }
+    });
+    
+    return { success: true, method: 'yt-dlp-android' };
+  },
+
+  // Strategy 3: Enhanced Puppeteer with better stealth
+  async function strategyStealthPuppeteer(videoId, outputPath) {
+    console.log('🎯 Strategy 3: Enhanced stealth Puppeteer...');
+    
+    const browser = await browserPool.getBrowser();
+    const page = await browser.newPage();
+    
     try {
-      console.log('🤖 Attempting enhanced Puppeteer extraction...');
-      const videoInfo = await extractVideoUrlWithPuppeteer(videoId);
+      // Enhanced stealth configuration
+      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
       
-      if (!videoInfo?.url) {
-        throw new Error('No valid video URL found');
+      // More comprehensive bot detection bypass
+      await page.evaluateOnNewDocument(() => {
+        // Remove webdriver property
+        delete navigator.__proto__.webdriver;
+        
+        // Mock plugins
+        Object.defineProperty(navigator, 'plugins', {
+          get: () => [1, 2, 3, 4, 5]
+        });
+        
+        // Mock languages
+        Object.defineProperty(navigator, 'languages', {
+          get: () => ['en-US', 'en']
+        });
+        
+        // Mock permissions
+        Object.defineProperty(navigator, 'permissions', {
+          get: () => ({
+            query: () => Promise.resolve({ state: 'granted' })
+          })
+        });
+      });
+
+      // Set realistic viewport
+      await page.setViewport({ width: 1366, height: 768 });
+      
+      // Add realistic headers
+      await page.setExtraHTTPHeaders({
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none'
+      });
+
+      // Navigate with realistic timing
+      await page.goto(`https://www.youtube.com/watch?v=${videoId}`, {
+        waitUntil: 'networkidle0',
+        timeout: 45000
+      });
+
+      // Random human-like delay
+      await page.waitForTimeout(2000 + Math.random() * 3000);
+
+      // Look for and handle consent dialogs
+      try {
+        const consentButton = await page.$('button[aria-label*="Accept"], button[aria-label*="Reject"], .VfPpkd-LgbsSe[jsname="tWT92d"]');
+        if (consentButton) {
+          await consentButton.click();
+          await page.waitForTimeout(2000);
+        }
+      } catch (e) {
+        // Consent dialog might not exist
       }
 
-      console.log('⬇️ Downloading video stream...');
+      // Wait for video player
+      await page.waitForSelector('video', { timeout: 20000 });
+      
+      // Extract video data using multiple methods
+      const videoData = await page.evaluate(async (videoId) => {
+        // Method 1: Try to find ytInitialPlayerResponse
+        const scripts = Array.from(document.querySelectorAll('script'));
+        
+        for (const script of scripts) {
+          if (script.textContent && script.textContent.includes('ytInitialPlayerResponse')) {
+            const matches = script.textContent.match(/ytInitialPlayerResponse\s*=\s*({.+?});/);
+            if (matches) {
+              try {
+                const playerResponse = JSON.parse(matches[1]);
+                const streamingData = playerResponse.streamingData;
+                
+                if (streamingData && (streamingData.formats || streamingData.adaptiveFormats)) {
+                  const formats = [
+                    ...(streamingData.formats || []),
+                    ...(streamingData.adaptiveFormats || [])
+                  ];
+                  
+                  // Filter for video formats
+                  const videoFormats = formats.filter(f => 
+                    f.mimeType && f.mimeType.includes('video/mp4') && f.url
+                  );
+                  
+                  if (videoFormats.length > 0) {
+                    // Sort by quality preference
+                    videoFormats.sort((a, b) => {
+                      const heightA = parseInt(a.height) || 0;
+                      const heightB = parseInt(b.height) || 0;
+                      return heightA - heightB; // Prefer lower quality for reliability
+                    });
+                    
+                    return {
+                      title: document.title,
+                      url: videoFormats[0].url,
+                      quality: videoFormats[0].qualityLabel || 'unknown'
+                    };
+                  }
+                }
+              } catch (e) {
+                console.log('Error parsing ytInitialPlayerResponse:', e);
+              }
+            }
+          }
+        }
+        
+        return null;
+      }, videoId);
+
+      if (!videoData?.url) {
+        throw new Error('No video URL found');
+      }
+
+      console.log('📹 Found video URL, quality:', videoData.quality);
+
+      // Download the video stream
       const response = await axios({
         method: 'GET',
-        url: videoInfo.url,
+        url: videoData.url,
         responseType: 'stream',
-        timeout: 300000,
+        timeout: 180000,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
           'Referer': `https://www.youtube.com/watch?v=${videoId}`,
           'Accept': '*/*',
-          'Accept-Encoding': 'identity' // Important for streaming
-        }
+          'Accept-Encoding': 'identity'
+        },
+        maxRedirects: 5
       });
 
-      const writer = fs.createWriteStream(finalVideoPath);
+      // Stream to file
+      const writer = fs.createWriteStream(outputPath);
       response.data.pipe(writer);
 
       await new Promise((resolve, reject) => {
@@ -241,136 +299,88 @@ async function downloadVideoWithFallbacks(videoId) {
         response.data.on('error', reject);
       });
 
-      // Verify download
-      const stats = fs.statSync(finalVideoPath);
-      if (stats.size > 0) {
-        console.log('✅ Direct download successful');
-        return { success: true, method: 'puppeteer-direct' };
-      }
-      throw new Error('Downloaded file is empty');
+      return { success: true, method: 'puppeteer-stealth', title: videoData.title };
 
-    } catch (puppeteerError) {
-      console.error('❌ Enhanced Puppeteer method failed:', puppeteerError.message);
+    } finally {
+      await page.close();
     }
-  }
+  },
 
-  throw new Error('All download methods failed');
-}
-
-// Middleware
-app.use(cors());
-app.use(express.json());
-
-// Path configurations
-const VIDEOS_DIR = path.join(__dirname, 'videos');
-const COOKIES_PATH = path.join(__dirname, 'cookies.txt');
-
-console.log('🎬 Stepwise Studio starting...');
-console.log('📁 Videos directory:', VIDEOS_DIR);
-console.log('🌍 Environment:', process.env.NODE_ENV || 'development');
-console.log('📺 yt-dlp path:', YT_DLP_PATH);
-console.log('🤖 Puppeteer configured for bot detection bypass');
-
-// Ensure directories exist
-if (!fs.existsSync(VIDEOS_DIR)) {
-  fs.mkdirSync(VIDEOS_DIR, { recursive: true });
-  console.log('📁 Created videos directory');
-}
-
-// Create basic cookies file if it doesn't exist
-if (!fs.existsSync(COOKIES_PATH)) {
-  fs.writeFileSync(COOKIES_PATH, '# Netscape HTTP Cookie File\n');
-  console.log('🍪 Created cookies file');
-}
-
-// Rate limiting for downloads
-const downloadQueue = new Map();
-const DOWNLOAD_COOLDOWN = 5000;
-
-function checkDownloadRateLimit(ip) {
-  const now = Date.now();
-  const lastDownload = downloadQueue.get(ip) || 0;
-  
-  if (now - lastDownload < DOWNLOAD_COOLDOWN) {
-    return {
-      allowed: false,
-      timeRemaining: Math.ceil((DOWNLOAD_COOLDOWN - (now - lastDownload)) / 1000)
-    };
-  }
-  
-  downloadQueue.set(ip, now);
-  return { allowed: true };
-}
-
-// Serve static files
-app.use(express.static(__dirname, {
-  setHeaders: (res, path) => {
-    if (path.endsWith('.mp4')) {
-      res.setHeader('Cache-Control', 'public, max-age=86400');
-    }
-  }
-}));
-
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'healthy', 
-    timestamp: new Date().toISOString(),
-    videosDir: fs.existsSync(VIDEOS_DIR),
-    ytDlpBinary: fs.existsSync(YT_DLP_PATH),
-    puppeteerEnabled: true,
-    environment: process.env.NODE_ENV || 'development'
-  });
-});
-
-// YouTube search endpoint (unchanged)
-app.get('/youtube-search', async (req, res) => {
-  try {
-    const query = req.query.q;
-    if (!query) {
-      return res.status(400).json({ error: 'Missing search query' });
-    }
-
-    if (!process.env.YOUTUBE_API_KEY) {
-      console.error('❌ YouTube API key not configured');
-      return res.status(500).json({ error: 'YouTube API key not configured' });
-    }
-
-    console.log('🔍 Searching YouTube for:', query);
-
-    const response = await axios.get(
-      'https://www.googleapis.com/youtube/v3/search',
-      {
-        params: {
-          part: 'snippet',
-          type: 'video',
-          maxResults: 12,
-          q: query + ' dance tutorial',
-          key: process.env.YOUTUBE_API_KEY,
-          safeSearch: 'strict'
-        },
-        timeout: 10000
-      }
-    );
-
-    console.log('✅ Found', response.data.items?.length || 0, 'videos');
-    res.json(response.data);
-
-  } catch (error) {
-    console.error('❌ YouTube API error:', error.response?.data || error.message);
+  // Strategy 4: Alternative extraction using embed player
+  async function strategyEmbedPlayer(videoId, outputPath) {
+    console.log('🎯 Strategy 4: Embed player extraction...');
     
-    if (error.response?.status === 403) {
-      return res.status(403).json({ error: 'YouTube API quota exceeded or invalid key' });
-    }
-    
-    res.status(500).json({ 
-      error: 'Failed to search YouTube',
-      details: error.response?.data?.error?.message || error.message
+    const args = [
+      '--format', 'worst[height<=360]/best[height<=480]/best',
+      '--extractor-args', 'youtube:player_client=tv_embedded,web_embedded',
+      '--user-agent', 'Mozilla/5.0 (SMART-TV; Linux; Tizen 2.4.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/2.4.0 TV Safari/538.1',
+      '--add-header', 'X-YouTube-Client-Name:85',
+      '--add-header', 'X-YouTube-Client-Version:2.0',
+      '--socket-timeout', '30',
+      '--retries', '1',
+      '--no-warnings',
+      '--no-playlist',
+      '-o', outputPath,
+      `https://www.youtube.com/embed/${videoId}`
+    ];
+
+    await execFileAsync(YT_DLP_PATH, args, {
+      timeout: 90000,
+      env: { ...process.env, PATH: process.env.PATH }
     });
+    
+    return { success: true, method: 'yt-dlp-embed' };
   }
-});
+];
 
-// Enhanced download endpoint with Puppeteer
+// Enhanced download function with multiple strategies
+async function downloadVideoWithMultipleStrategies(videoId) {
+  const outputTemplate = path.join(VIDEOS_DIR, `${videoId}.%(ext)s`);
+  const finalVideoPath = path.join(VIDEOS_DIR, `${videoId}.mp4`);
+
+  // Try each strategy in sequence
+  for (let i = 0; i < downloadStrategies.length; i++) {
+    try {
+      console.log(`\n🎬 Attempting download strategy ${i + 1}/${downloadStrategies.length} for ${videoId}`);
+      
+      const result = await downloadStrategies[i](videoId, outputTemplate);
+      
+      // Verify the download worked
+      if (fs.existsSync(finalVideoPath)) {
+        const stats = fs.statSync(finalVideoPath);
+        if (stats.size > 1000) { // At least 1KB
+          console.log(`✅ Success with strategy ${i + 1}: ${result.method} (${(stats.size / 1024 / 1024).toFixed(2)}MB)`);
+          return result;
+        } else {
+          console.log(`⚠️ Strategy ${i + 1} created empty file, trying next...`);
+          fs.unlinkSync(finalVideoPath);
+        }
+      }
+      
+    } catch (error) {
+      console.log(`❌ Strategy ${i + 1} failed: ${error.message}`);
+      
+      // Clean up any partial files
+      try {
+        if (fs.existsSync(finalVideoPath)) {
+          fs.unlinkSync(finalVideoPath);
+        }
+      } catch (cleanupError) {
+        // Ignore cleanup errors
+      }
+      
+      // If this is not the last strategy, continue to next
+      if (i < downloadStrategies.length - 1) {
+        console.log(`⏭️ Trying next strategy...`);
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Brief pause between attempts
+      }
+    }
+  }
+
+  throw new Error(`All ${downloadStrategies.length} download strategies failed`);
+}
+
+// Update the main download endpoint
 app.get('/download', async (req, res) => {
   const videoId = req.query.id;
   if (!videoId) {
@@ -396,19 +406,19 @@ app.get('/download', async (req, res) => {
     return res.json({ url: `/videos/${videoId}.mp4` });
   }
 
-  console.log('⬇️ Starting enhanced download for video:', videoId);
+  console.log('⬇️ Starting multi-strategy download for video:', videoId);
 
   try {
-    const result = await downloadVideoWithFallbacks(videoId);
+    const result = await downloadVideoWithMultipleStrategies(videoId);
     
-    // Verify the file exists and is not empty
+    // Final verification
     const stats = fs.statSync(finalVideoPath);
     if (stats.size === 0) {
       fs.unlinkSync(finalVideoPath);
       throw new Error('Downloaded video file is empty');
     }
 
-    console.log(`✅ Download completed using ${result.method}:`, videoId, `(${(stats.size / 1024 / 1024).toFixed(2)}MB)`);
+    console.log(`🎉 Download completed successfully: ${videoId} using ${result.method}`);
     res.json({ 
       url: `/videos/${videoId}.mp4`,
       method: result.method,
@@ -416,10 +426,10 @@ app.get('/download', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ All download methods failed for', videoId);
-    console.error('Error details:', error.message);
+    console.error('❌ All download strategies failed for', videoId);
+    console.error('Final error:', error.message);
     
-    // Clean up any partial files
+    // Clean up any remaining partial files
     try {
       if (fs.existsSync(finalVideoPath)) {
         fs.unlinkSync(finalVideoPath);
@@ -428,61 +438,63 @@ app.get('/download', async (req, res) => {
       console.error('❌ Cleanup error:', cleanupError.message);
     }
     
-    // User-friendly error messages
-    let userMessage = 'Failed to download video';
-    let userDetails = 'Please try again or select a different video';
+    // Return user-friendly error based on the type of failure
+    let userMessage = 'Unable to download video';
+    let userDetails = 'This video may be restricted or unavailable. Please try a different video.';
     
-    if (error.message.includes('Sign in to confirm') || error.message.includes('bot detection')) {
+    if (error.message.includes('bot') || error.message.includes('Sign in')) {
       userMessage = 'Video temporarily unavailable';
-      userDetails = 'YouTube is currently blocking automated downloads. Please try again in a few minutes.';
-    } else if (error.message.includes('Video unavailable')) {
-      userMessage = 'Video not accessible';
-      userDetails = 'This video may be private, deleted, or restricted.';
+      userDetails = 'YouTube is currently blocking downloads. Please try again in a few minutes or try a different video.';
     } else if (error.message.includes('timeout')) {
       userMessage = 'Download timeout';
-      userDetails = 'The video took too long to download. Please try a shorter video.';
+      userDetails = 'The download took too long. Please try a shorter or different video.';
+    } else if (error.message.includes('unavailable') || error.message.includes('private')) {
+      userMessage = 'Video not accessible';
+      userDetails = 'This video may be private, deleted, or region-restricted.';
     }
     
     res.status(500).json({ 
       error: userMessage, 
-      details: userDetails
+      details: userDetails,
+      suggestion: 'Try searching for dance tutorials with clear, simple titles for better success rates.'
     });
   }
 });
 
-// Original yt-dlp download function (keeping as fallback)
-async function downloadVideoWithYtDlp(videoUrl, outputTemplate) {
-  const args = [
-    '--cookies', COOKIES_PATH,
-    '--format', 'bestvideo[height<=480]+bestaudio/best[height<=480]',
-    '--merge-output-format', 'mp4',
-    '--no-playlist',
-    '--socket-timeout', '30',
-    '--fragment-retries', '3',
-    '--retries', '3',
-    '--max-filesize', '100M',
-    '-o', outputTemplate,
-    '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    '--referer', 'https://www.youtube.com/',
-    '--extractor-args', 'youtube:player_client=ios,web',
-    '--no-warnings',
-    '--sleep-interval', '1',
-    '--max-sleep-interval', '3',
-    videoUrl
-  ];
+// Add a health check for download capabilities
+app.get('/download-health', async (req, res) => {
+  try {
+    // Test if yt-dlp binary works
+    const { stdout } = await execFileAsync(YT_DLP_PATH, ['--version'], { timeout: 10000 });
+    
+    const health = {
+      status: 'healthy',
+      ytdlpVersion: stdout.trim(),
+      cookiesAvailable: fs.existsSync(cookieManager.cookiesPath),
+      lastCookieUpdate: new Date(cookieManager.lastCookieUpdate).toISOString(),
+      strategiesAvailable: downloadStrategies.length,
+      puppeteerEnabled: true
+    };
+    
+    res.json(health);
+  } catch (error) {
+    res.status(500).json({
+      status: 'unhealthy',
+      error: error.message,
+      strategiesAvailable: downloadStrategies.length
+    });
+  }
+});
 
-  const { stdout, stderr } = await execFileAsync(YT_DLP_PATH, args, {
-    timeout: 300000,
-    maxBuffer: 1024 * 1024 * 10,
-    cwd: __dirname,
-    env: {
-      ...process.env,
-      PATH: process.env.PATH
-    }
-  });
-  
-  return { success: true, stdout, stderr };
-}
+// Periodic cookie refresh (every 30 minutes)
+setInterval(async () => {
+  try {
+    console.log('🍪 Refreshing YouTube cookies...');
+    await cookieManager.generateFreshCookies();
+  } catch (error) {
+    console.error('❌ Scheduled cookie refresh failed:', error.message);
+  }
+}, cookieManager.cookieUpdateInterval);
 
 // Serve video files
 app.use('/videos', express.static(VIDEOS_DIR, {
