@@ -11,7 +11,8 @@ const fs = require('fs');
 const axios = require('axios');
 const { execFile } = require('child_process');
 const { promisify } = require('util');
-const puppeteer = require('puppeteer');
+const chromium = require('@sparticuz/chromium');
+const puppeteer = require('puppeteer-core');
 
 const execFileAsync = promisify(execFile);
 const app = express();
@@ -21,133 +22,63 @@ const YT_DLP_PATH = process.env.NODE_ENV === 'production'
   ? path.join(__dirname, 'bin', 'yt-dlp')
   : 'yt-dlp';
 
-// Puppeteer configuration for bot detection bypass
-const PUPPETEER_CONFIG = {
-  headless: process.env.NODE_ENV === 'production' ? true : 'new',
+// Puppeteer configuration for Render
+const getPuppeteerConfig = async () => ({
   args: [
-    '--no-sandbox',
-    '--disable-setuid-sandbox',
-    '--disable-dev-shm-usage',
-    '--disable-accelerated-2d-canvas',
-    '--no-first-run',
-    '--no-zygote',
-    '--single-process',
+    ...chromium.args,
     '--disable-gpu',
-    '--disable-web-security',
-    '--disable-features=VizDisplayCompositor',
-    '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    '--disable-blink-features=AutomationControlled',
-    '--disable-background-networking',
-    '--disable-background-timer-throttling',
-    '--disable-backgrounding-occluded-windows',
-    '--disable-renderer-backgrounding',
-    '--disable-extensions',
-    '--disable-ipc-flooding-protection',
-    '--enable-automation=false',
-    '--password-store=basic',
-    '--use-mock-keychain',
-    '--lang=en-US,en'
+    '--disable-software-rasterizer',
+    '--disable-dev-shm-usage',
+    '--single-process'
   ],
-  ignoreDefaultArgs: ['--enable-automation'],
+  executablePath: process.env.CHROMIUM_EXECUTABLE_PATH || await chromium.executablePath(),
+  headless: chromium.headless,
+  ignoreHTTPSErrors: true,
   defaultViewport: {
     width: 1366,
     height: 768
-  }
-};
+  },
+  timeout: 30000
+});
 
-// Browser pool for reusing instances
+// Simplified BrowserPool class for Render
 class BrowserPool {
-  constructor(maxBrowsers = 3) {
-    this.browsers = [];
-    this.maxBrowsers = maxBrowsers;
-    this.currentIndex = 0;
+  constructor() {
+    this.browser = null;
   }
 
   async getBrowser() {
-    if (this.browsers.length < this.maxBrowsers) {
-      const browser = await this.createBrowser();
-      this.browsers.push(browser);
-      return browser;
-    }
-
-    // Round-robin through existing browsers
-    const browser = this.browsers[this.currentIndex];
-    this.currentIndex = (this.currentIndex + 1) % this.browsers.length;
-    
-    // Check if browser is still connected
-    if (!browser.isConnected()) {
-      // Replace disconnected browser
-      const newBrowser = await this.createBrowser();
-      this.browsers[this.currentIndex] = newBrowser;
-      return newBrowser;
-    }
-    
-    return browser;
-  }
-
-  async createBrowser() {
-    const browser = await puppeteer.launch(PUPPETEER_CONFIG);
-    
-    // Set up stealth mode
-    const pages = await browser.pages();
-    const page = pages[0] || await browser.newPage();
-    
-    // Override webdriver detection
-    await page.evaluateOnNewDocument(() => {
-      Object.defineProperty(navigator, 'webdriver', {
-        get: () => undefined,
+    if (!this.browser || !this.browser.isConnected()) {
+      this.browser = await puppeteer.launch(await getPuppeteerConfig());
+      
+      const page = await this.browser.newPage();
+      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+      
+      // Basic stealth settings
+      await page.evaluateOnNewDocument(() => {
+        Object.defineProperty(navigator, 'webdriver', { get: () => false });
       });
       
-      // Mock languages and plugins
-      Object.defineProperty(navigator, 'languages', {
-        get: () => ['en-US', 'en'],
-      });
-      
-      Object.defineProperty(navigator, 'plugins', {
-        get: () => [1, 2, 3, 4, 5],
-      });
-      
-      // Remove automation indicators
-      delete navigator.__proto__.webdriver;
-      
-      // Mock chrome object
-      window.chrome = {
-        runtime: {},
-        loadTimes: function() {},
-        csi: function() {},
-        app: {}
-      };
-      
-      // Mock permissions
-      const originalQuery = window.navigator.permissions.query;
-      window.navigator.permissions.query = (parameters) => (
-        parameters.name === 'notifications' ?
-          Promise.resolve({ state: Cypress.env('NOTIFICATION_PERMISSION') || 'granted' }) :
-          originalQuery(parameters)
-      );
-    });
-
-    return browser;
-  }
-
-  async closeBrowser(browser) {
-    try {
-      await browser.close();
-      this.browsers = this.browsers.filter(b => b !== browser);
-    } catch (err) {
-      console.error('Error closing browser:', err);
+      await page.close();
     }
+    return this.browser;
   }
 
   async closeAll() {
-    await Promise.all(this.browsers.map(browser => this.closeBrowser(browser)));
-    this.browsers = [];
+    if (this.browser) {
+      try {
+        await this.browser.close();
+      } catch (err) {
+        console.error('Error closing browser:', err);
+      }
+      this.browser = null;
+    }
   }
 }
 
 const browserPool = new BrowserPool();
 
-// Enhanced YouTube URL extraction with Puppeteer
+// Simplified YouTube URL extraction
 async function extractVideoUrlWithPuppeteer(videoId) {
   let browser;
   let page;
@@ -158,156 +89,54 @@ async function extractVideoUrlWithPuppeteer(videoId) {
     browser = await browserPool.getBrowser();
     page = await browser.newPage();
     
-    // Set additional headers to mimic real browser
+    // Basic headers
     await page.setExtraHTTPHeaders({
       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
-      'Accept-Encoding': 'gzip, deflate, br',
-      'Accept-Language': 'en-US,en;q=0.9',
-      'Cache-Control': 'no-cache',
-      'Pragma': 'no-cache',
-      'Sec-Fetch-Mode': 'navigate',
-      'Sec-Fetch-Site': 'none',
-      'Sec-Fetch-User': '?1',
-      'Upgrade-Insecure-Requests': '1'
+      'Accept-Language': 'en-US,en;q=0.9'
     });
 
-    // Set realistic viewport and user agent
-    await page.setViewport({ width: 1366, height: 768 });
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-
-    // Navigate to YouTube video page
+    // Navigate to YouTube
     const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-    console.log('🌐 Navigating to:', videoUrl);
-    
     await page.goto(videoUrl, {
       waitUntil: 'domcontentloaded',
       timeout: 30000
     });
 
-    // Wait for video player to load
-    await page.waitForSelector('video', { timeout: 20000 });
+    // Wait for video player
+    await page.waitForSelector('video', { timeout: 15000 });
 
-    // Handle cookie consent if present
-    try {
-      const consentButton = await page.$('[aria-label*="Accept"], [aria-label*="I agree"], button:has-text("Accept all")');
-      if (consentButton) {
-        await consentButton.click();
-        await page.waitForTimeout(2000);
-      }
-    } catch (err) {
-      console.log('No consent dialog found or error clicking:', err.message);
-    }
-
-    // Extract video information from the page
+    // Get direct video URL if available
     const videoInfo = await page.evaluate(() => {
       const video = document.querySelector('video');
-      if (!video || !video.src) {
-        return null;
-      }
-
-      // Try to get video URLs from various sources
-      let videoUrls = [];
+      if (!video || !video.src) return null;
       
-      // Method 1: Direct video src
-      if (video.src && video.src.includes('blob:') === false) {
-        videoUrls.push({
-          url: video.src,
-          quality: 'direct',
-          format: 'mp4'
-        });
-      }
-
-      // Method 2: Extract from ytInitialPlayerResponse
-      try {
-        const scripts = document.querySelectorAll('script');
-        for (let script of scripts) {
-          const content = script.textContent || '';
-          if (content.includes('ytInitialPlayerResponse')) {
-            const match = content.match(/ytInitialPlayerResponse\s*=\s*({.+?});/);
-            if (match) {
-              const playerResponse = JSON.parse(match[1]);
-              const streamingData = playerResponse.streamingData;
-              
-              if (streamingData && streamingData.formats) {
-                for (let format of streamingData.formats) {
-                  if (format.url && format.mimeType && format.mimeType.includes('mp4')) {
-                    videoUrls.push({
-                      url: format.url,
-                      quality: format.qualityLabel || 'unknown',
-                      format: 'mp4',
-                      filesize: format.contentLength
-                    });
-                  }
-                }
-              }
-              
-              if (streamingData && streamingData.adaptiveFormats) {
-                for (let format of streamingData.adaptiveFormats) {
-                  if (format.url && format.mimeType && format.mimeType.includes('mp4') && !format.mimeType.includes('audio')) {
-                    videoUrls.push({
-                      url: format.url,
-                      quality: format.qualityLabel || 'unknown',
-                      format: 'mp4',
-                      filesize: format.contentLength
-                    });
-                  }
-                }
-              }
-              break;
-            }
-          }
-        }
-      } catch (e) {
-        console.log('Error parsing ytInitialPlayerResponse:', e);
-      }
-
-      // Get video metadata
-      const title = document.querySelector('h1.title yt-formatted-string, h1[class*="title"] yt-formatted-string, meta[property="og:title"]')?.textContent || 
-                   document.querySelector('meta[property="og:title"]')?.getAttribute('content') || 
-                   document.title;
-      
-      const duration = document.querySelector('.ytp-time-duration')?.textContent || 
-                      document.querySelector('meta[itemprop="duration"]')?.getAttribute('content');
-
       return {
-        videoUrls: videoUrls,
-        title: title,
-        duration: duration,
-        available: videoUrls.length > 0
+        url: video.src.includes('blob:') ? null : video.src,
+        title: document.title
       };
     });
 
-    if (!videoInfo || !videoInfo.available) {
-      throw new Error('No video URLs found or video unavailable');
+    if (!videoInfo?.url) {
+      throw new Error('No direct video URL found');
     }
 
-    console.log('✅ Extracted video info:', {
-      title: videoInfo.title,
-      urlCount: videoInfo.videoUrls.length
-    });
-
+    console.log('✅ Extracted video URL');
     return videoInfo;
 
   } catch (error) {
     console.error('❌ Puppeteer extraction failed:', error.message);
     throw error;
   } finally {
-    if (page) {
-      try {
-        await page.close();
-      } catch (err) {
-        console.error('Error closing page:', err);
-      }
-    }
+    if (page) await page.close().catch(console.error);
   }
 }
 
-// Enhanced download function with Puppeteer fallback
+// Modified download function with simplified fallback
 async function downloadVideoWithFallbacks(videoId) {
   const outputTemplate = path.join(VIDEOS_DIR, `${videoId}.%(ext)s`);
   const finalVideoPath = path.join(VIDEOS_DIR, `${videoId}.mp4`);
 
-  // Method 1: Try yt-dlp first (fastest when it works)
+  // Try yt-dlp first
   try {
     console.log('🎯 Attempting yt-dlp download...');
     await downloadVideoWithYtDlp(`https://www.youtube.com/watch?v=${videoId}`, outputTemplate);
@@ -320,75 +149,53 @@ async function downloadVideoWithFallbacks(videoId) {
     console.log('⚠️ yt-dlp failed, trying Puppeteer method...');
   }
 
-  // Method 2: Puppeteer extraction + direct download
-  try {
-    console.log('🤖 Attempting Puppeteer extraction...');
-    const videoInfo = await extractVideoUrlWithPuppeteer(videoId);
-    
-    if (!videoInfo.videoUrls || videoInfo.videoUrls.length === 0) {
-      throw new Error('No video URLs found');
-    }
-
-    // Sort by quality (prefer lower quality for faster download)
-    const sortedUrls = videoInfo.videoUrls.sort((a, b) => {
-      const qualityOrder = { '360p': 1, '480p': 2, '720p': 3, '1080p': 4 };
-      return (qualityOrder[a.quality] || 5) - (qualityOrder[b.quality] || 5);
-    });
-
-    // Try downloading from the extracted URLs
-    for (let i = 0; i < Math.min(3, sortedUrls.length); i++) {
-      const videoUrl = sortedUrls[i];
-      console.log(`🔄 Trying download ${i + 1}/${sortedUrls.length}: ${videoUrl.quality}`);
+  // Fallback to Puppeteer only if absolutely necessary
+  if (process.env.ENABLE_PUPPETEER === 'true') {
+    try {
+      console.log('🤖 Attempting Puppeteer extraction...');
+      const videoInfo = await extractVideoUrlWithPuppeteer(videoId);
       
-      try {
-        const response = await axios({
-          method: 'GET',
-          url: videoUrl.url,
-          responseType: 'stream',
-          timeout: 300000, // 5 minutes
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Referer': 'https://www.youtube.com/',
-            'Accept': '*/*',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Accept-Language': 'en-US,en;q=0.9'
-          },
-          maxRedirects: 5
-        });
-
-        const writer = fs.createWriteStream(finalVideoPath);
-        response.data.pipe(writer);
-
-        await new Promise((resolve, reject) => {
-          writer.on('finish', resolve);
-          writer.on('error', reject);
-          response.data.on('error', reject);
-        });
-
-        // Verify file was downloaded successfully
-        const stats = fs.statSync(finalVideoPath);
-        if (stats.size > 0) {
-          console.log('✅ Direct download successful:', `${(stats.size / 1024 / 1024).toFixed(2)}MB`);
-          return { success: true, method: 'puppeteer-direct' };
-        } else {
-          fs.unlinkSync(finalVideoPath);
-          throw new Error('Downloaded file is empty');
-        }
-
-      } catch (downloadError) {
-        console.log(`❌ Direct download ${i + 1} failed:`, downloadError.message);
-        if (fs.existsSync(finalVideoPath)) {
-          fs.unlinkSync(finalVideoPath);
-        }
+      if (!videoInfo.url) {
+        throw new Error('No video URL found');
       }
+
+      // Download the video directly
+      const response = await axios({
+        method: 'GET',
+        url: videoInfo.url,
+        responseType: 'stream',
+        timeout: 300000,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Referer': 'https://www.youtube.com/'
+        }
+      });
+
+      const writer = fs.createWriteStream(finalVideoPath);
+      response.data.pipe(writer);
+
+      await new Promise((resolve, reject) => {
+        writer.on('finish', resolve);
+        writer.on('error', reject);
+        response.data.on('error', reject);
+      });
+
+      // Verify download
+      const stats = fs.statSync(finalVideoPath);
+      if (stats.size > 0) {
+        console.log('✅ Direct download successful');
+        return { success: true, method: 'puppeteer-direct' };
+      } else {
+        fs.unlinkSync(finalVideoPath);
+        throw new Error('Downloaded file is empty');
+      }
+
+    } catch (puppeteerError) {
+      console.error('❌ Puppeteer method failed:', puppeteerError.message);
     }
-
-    throw new Error('All direct download attempts failed');
-
-  } catch (puppeteerError) {
-    console.error('❌ Puppeteer method failed:', puppeteerError.message);
-    throw new Error('All download methods failed');
   }
+
+  throw new Error('All download methods failed');
 }
 
 // Middleware

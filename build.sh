@@ -42,4 +42,9 @@ else
     echo "❌ yt-dlp test failed, but continuing with build..."
 fi
 
+export CHROMIUM_EXECUTABLE_PATH="/opt/render/.cache/chromium/chrome"
+
+npm install @sparticuz/chromium --no-optional
+npm install puppeteer-core
+
 echo "🎉 Build process completed successfully!"
