@@ -1,15 +1,12 @@
 {
   "name": "stepwise-studio",
-  "version": "2.0.0",
-  "description": "Dance video player with precision controls and advanced bot detection bypass",
+  "version": "1.0.0",
+  "description": "Dance video player with precision controls",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "postinstall": "node scripts/setup-puppeteer.js || echo 'Setup script not found, continuing...'",
-    "setup": "mkdir -p scripts && node scripts/setup-puppeteer.js",
-    "test": "node test-stealth.js",
-    "clean": "rm -rf videos/*.mp4 && echo 'Cache cleared'"
+    "postinstall": "node scripts/setup-puppeteer.js"
   },
   "dependencies": {
     "express": "^4.18.2",
@@ -18,17 +15,13 @@
     "dotenv": "^16.3.1",
     "puppeteer": "^21.6.1",
     "puppeteer-extra": "^3.3.6",
-    "puppeteer-extra-plugin-stealth": "^2.11.2",
-    "puppeteer-extra-plugin-recaptcha": "^3.6.8",
-    "user-agents": "^1.1.174",
-    "proxy-agent": "^6.3.1"
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
   },
   "engines": {
-    "node": ">=18.0.0",
-    "npm": ">=8.0.0"
+    "node": ">=18.0.0"
   },
   "keywords": [
     "dance",
@@ -36,6 +29,5 @@
     "youtube",
     "tutorial",
     "player"
-  ],
-  "author": "Your Name"
+  ]
 }
