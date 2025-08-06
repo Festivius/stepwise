@@ -5,8 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js",
-    "postinstall": "node scripts/setup-puppeteer.js"
+    "dev": "nodemon server.js"
   },
   "dependencies": {
     "@sparticuz/chromium": "^138.0.2",
