@@ -36,6 +36,3 @@ pids
 # Build outputs
 dist/
 build/
-
-# Cookies
-cookies.txt
