@@ -84,47 +84,92 @@ async function extractVideoUrlWithPuppeteer(videoId) {
   let page;
   
   try {
-    console.log('🤖 Starting Puppeteer extraction for:', videoId);
-    
+    console.log('🤖 Starting enhanced Puppeteer extraction for:', videoId);
     browser = await browserPool.getBrowser();
     page = await browser.newPage();
-    
-    // Basic headers
+
+    // Set realistic browser fingerprints
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
     await page.setExtraHTTPHeaders({
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
-      'Accept-Language': 'en-US,en;q=0.9'
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Referer': 'https://www.youtube.com/'
     });
 
-    // Navigate to YouTube
-    const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
-    await page.goto(videoUrl, {
-      waitUntil: 'domcontentloaded',
+    // Bypass bot detection
+    await page.evaluateOnNewDocument(() => {
+      delete navigator.__proto__.webdriver;
+      Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3] });
+    });
+
+    // Navigate to YouTube with realistic delays
+    await page.goto(`https://www.youtube.com/watch?v=${videoId}`, {
+      waitUntil: 'networkidle2',
       timeout: 30000
     });
 
-    // Wait for video player
+    // Wait for important elements
     await page.waitForSelector('video', { timeout: 15000 });
+    await page.waitForTimeout(2000 + Math.random() * 3000); // Random delay
 
-    // Get direct video URL if available
-    const videoInfo = await page.evaluate(() => {
-      const video = document.querySelector('video');
-      if (!video || !video.src) return null;
-      
-      return {
-        url: video.src.includes('blob:') ? null : video.src,
-        title: document.title
-      };
+    // Extract video data from player response
+    const videoData = await page.evaluate(async () => {
+      try {
+        const scripts = Array.from(document.querySelectorAll('script'));
+        const playerScript = scripts.find(s => 
+          s.textContent.includes('ytInitialPlayerResponse')
+        );
+        
+        if (!playerScript) return null;
+        
+        const match = playerScript.textContent.match(
+          /ytInitialPlayerResponse\s*=\s*({.+?});/s
+        );
+        
+        if (!match) return null;
+        
+        const playerResponse = JSON.parse(match[1]);
+        const formats = [
+          ...(playerResponse.streamingData?.formats || []),
+          ...(playerResponse.streamingData?.adaptiveFormats || [])
+        ];
+        
+        // Filter for MP4 videos (non-audio)
+        const videoFormats = formats.filter(f => 
+          f.mimeType?.includes('video/mp4') && 
+          !f.mimeType?.includes('audio')
+        );
+        
+        // Sort by quality (360p, 480p, etc)
+        videoFormats.sort((a, b) => {
+          const qualityOrder = ['360p', '480p', '720p', '1080p'];
+          return qualityOrder.indexOf(a.qualityLabel) - qualityOrder.indexOf(b.qualityLabel);
+        });
+        
+        return {
+          title: document.title,
+          formats: videoFormats
+        };
+      } catch (e) {
+        console.error('Evaluation error:', e);
+        return null;
+      }
     });
 
-    if (!videoInfo?.url) {
-      throw new Error('No direct video URL found');
+    if (!videoData?.formats?.length) {
+      throw new Error('No playable formats found');
     }
 
-    console.log('✅ Extracted video URL');
-    return videoInfo;
+    // Select the best available format
+    const selectedFormat = videoData.formats[0];
+    console.log('✅ Found video format:', selectedFormat.qualityLabel);
+    
+    return {
+      url: selectedFormat.url,
+      title: videoData.title
+    };
 
   } catch (error) {
-    console.error('❌ Puppeteer extraction failed:', error.message);
+    console.error('❌ Enhanced Puppeteer extraction failed:', error.message);
     throw error;
   } finally {
     if (page) await page.close().catch(console.error);
@@ -136,30 +181,44 @@ async function downloadVideoWithFallbacks(videoId) {
   const outputTemplate = path.join(VIDEOS_DIR, `${videoId}.%(ext)s`);
   const finalVideoPath = path.join(VIDEOS_DIR, `${videoId}.mp4`);
 
-  // Try yt-dlp first
+  // Try yt-dlp first with enhanced parameters
   try {
-    console.log('🎯 Attempting yt-dlp download...');
-    await downloadVideoWithYtDlp(`https://www.youtube.com/watch?v=${videoId}`, outputTemplate);
+    console.log('🎯 Attempting yt-dlp download with enhanced parameters...');
+    await execFileAsync(YT_DLP_PATH, [
+      '--format', 'bestvideo[height<=480]+bestaudio/best[height<=480]',
+      '--throttled-rate', '100K',
+      '--sleep-interval', '5',
+      '--max-sleep-interval', '30',
+      '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      '--referer', 'https://www.youtube.com/',
+      '--extractor-args', 'youtube:player_client=android,web',
+      '--no-warnings',
+      '-o', outputTemplate,
+      `https://www.youtube.com/watch?v=${videoId}`
+    ], {
+      timeout: 300000,
+      env: { ...process.env, PATH: process.env.PATH }
+    });
     
     if (fs.existsSync(finalVideoPath)) {
       console.log('✅ yt-dlp download successful');
       return { success: true, method: 'yt-dlp' };
     }
   } catch (ytDlpError) {
-    console.log('⚠️ yt-dlp failed, trying Puppeteer method...');
+    console.log('⚠️ yt-dlp failed:', ytDlpError.message);
   }
 
-  // Fallback to Puppeteer only if absolutely necessary
+  // Fallback to enhanced Puppeteer method
   if (process.env.ENABLE_PUPPETEER === 'true') {
     try {
-      console.log('🤖 Attempting Puppeteer extraction...');
+      console.log('🤖 Attempting enhanced Puppeteer extraction...');
       const videoInfo = await extractVideoUrlWithPuppeteer(videoId);
       
-      if (!videoInfo.url) {
-        throw new Error('No video URL found');
+      if (!videoInfo?.url) {
+        throw new Error('No valid video URL found');
       }
 
-      // Download the video directly
+      console.log('⬇️ Downloading video stream...');
       const response = await axios({
         method: 'GET',
         url: videoInfo.url,
@@ -167,7 +226,9 @@ async function downloadVideoWithFallbacks(videoId) {
         timeout: 300000,
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Referer': 'https://www.youtube.com/'
+          'Referer': `https://www.youtube.com/watch?v=${videoId}`,
+          'Accept': '*/*',
+          'Accept-Encoding': 'identity' // Important for streaming
         }
       });
 
@@ -185,13 +246,11 @@ async function downloadVideoWithFallbacks(videoId) {
       if (stats.size > 0) {
         console.log('✅ Direct download successful');
         return { success: true, method: 'puppeteer-direct' };
-      } else {
-        fs.unlinkSync(finalVideoPath);
-        throw new Error('Downloaded file is empty');
       }
+      throw new Error('Downloaded file is empty');
 
     } catch (puppeteerError) {
-      console.error('❌ Puppeteer method failed:', puppeteerError.message);
+      console.error('❌ Enhanced Puppeteer method failed:', puppeteerError.message);
     }
   }
 
