@@ -55,14 +55,14 @@
     "appId": "com.festivius.stepwisestudio",
     "productName": "Stepwise Studio",
     "copyright": "Copyright © 2025 Stepwise Studio",
-    "releaseType": "release",
     "directories": {
       "output": "dist"
     },
     "publish": {
       "provider": "github",
       "owner": "Festivius",
-      "repo": "stepwise"
+      "repo": "stepwise",
+      "releaseType": "release"
     },
     "files": [
       "src/**/*",
