@@ -5,6 +5,7 @@ const { exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const axios = require('axios');
+const { youtube } = require('./config');
 
 const app = express();
 
@@ -66,11 +67,6 @@ app.get('/youtube-search', async (req, res) => {
       return res.status(400).json({ error: 'Missing search query' });
     }
 
-    if (!process.env.YOUTUBE_API_KEY) {
-      console.error('❌ YouTube API key not configured');
-      return res.status(500).json({ error: 'YouTube API key not configured' });
-    }
-
     console.log('🔍 Searching YouTube for:', query);
 
     const response = await axios.get(
@@ -81,7 +77,7 @@ app.get('/youtube-search', async (req, res) => {
           type: 'video',
           maxResults: 12,
           q: query + ' dance tutorial',
-          key: process.env.YOUTUBE_API_KEY,
+          key: youtube.apiKey,
           safeSearch: 'strict'
         },
         timeout: 15000
