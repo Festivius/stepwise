@@ -1,6 +1,6 @@
 {
   "name": "stepwise-studio",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Dance video player with precision controls - Master your moves with looping, speed control, and mirroring",
   "main": "main.js",
   "scripts": {
@@ -55,6 +55,7 @@
     "appId": "com.festivius.stepwisestudio",
     "productName": "Stepwise Studio",
     "copyright": "Copyright © 2025 Stepwise Studio",
+    "releaseType": "release",
     "directories": {
       "output": "dist"
     },

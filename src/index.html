@@ -1198,8 +1198,9 @@
 
   <script>
     // Check if we're running in Electron
-    // const isElectron = window && window.process && window.process.type;
-    
+    // Check if we're running in Electron - FIXED
+    const isElectron = !!(window.electronAPI && window.electronAPI.getAppVersion);
+
     if (window.electronAPI) {
       // Set app version in footer
       window.electronAPI.getAppVersion().then(version => {
@@ -1210,7 +1211,7 @@
       });
     }
 
-    const backendURL = isElectron ? '' : 'http://localhost:3000';
+    const backendURL = isElectron ? 'http://127.0.0.1:3001' : 'http://localhost:3000';
     
     // Cookie utility functions
     function setCookie(name, value, days = 30) {
@@ -1613,22 +1614,22 @@
         });
         
       } catch (err) {
-        if (isElectron) {
+        console.error('Search error:', err);
+        if (isElectron && window.electronAPI.showMessageBox) {
           window.electronAPI.showMessageBox({
             type: 'error',
             title: 'Search Error',
             message: 'Failed to search YouTube',
             detail: err.message
           });
-        } else {
-          resultsDiv.innerHTML = `
-            <div class="error-message">
-              <i class="fas fa-exclamation-triangle"></i>
-              <p>Error searching videos. Please try again!</p>
-            </div>
-          `;
         }
-        console.error('Search error:', err);
+        resultsDiv.innerHTML = `
+          <div class="error-message">
+            <i class="fas fa-exclamation-triangle"></i>
+            <p>Error searching videos. Please try again!</p>
+            <p style="font-size: 0.8em; color: #666;">${err.message}</p>
+          </div>
+        `;
       }
     }
     
@@ -1685,8 +1686,8 @@
         videoTitle.textContent = cleanTitle || 'Dance Tutorial';
         videoTitle.style.display = 'block';
         
-        // Set video source - handle Electron file paths
-        video.src = isElectron ? data.url : (backendURL + data.url);
+        // Set video source - handle both Electron file:// URLs and web URLs
+        video.src = data.url;
         video.load();
         
         video.oncanplay = async () => {
@@ -1704,7 +1705,8 @@
           }
         };
       } catch (err) {
-        if (isElectron) {
+        console.error('Download/playback error:', err);
+        if (isElectron && window.electronAPI.showMessageBox) {
           window.electronAPI.showMessageBox({
             type: 'error',
             title: 'Playback Error',
@@ -1714,7 +1716,6 @@
         } else {
           alert('Error downloading or playing video. Please try again!');
         }
-        console.error(err);
         resultsDiv.innerHTML = '';
         videoTitle.style.display = 'none';
       }
