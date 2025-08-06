@@ -1034,7 +1034,7 @@
 </head>
 <body>
   <div class="header">
-    <img src="assets/stepwise-icon.png" alt="Dancing figure icon" class="header-icon">
+    <img src="../assets/stepwise-icon.png" alt="Dancing figure icon" class="header-icon">
     <div class="header-content">
       <h1>Stepwise Studio</h1>
       <p class="tagline">Precision • Dance • Control</p>
@@ -1197,7 +1197,20 @@
   <div class="save-notification" id="saveNotification">Video saved!</div>
 
   <script>
-    const backendURL = 'http://localhost:3000';
+    // Check if we're running in Electron
+    // const isElectron = window && window.process && window.process.type;
+    
+    if (window.electronAPI) {
+      // Set app version in footer
+      window.electronAPI.getAppVersion().then(version => {
+        const footer = document.querySelector('.footer p');
+        if (footer) {
+          footer.textContent = `Stepwise Studio v${version} | Master dance moves with precision`;
+        }
+      });
+    }
+
+    const backendURL = isElectron ? '' : 'http://localhost:3000';
     
     // Cookie utility functions
     function setCookie(name, value, days = 30) {
@@ -1523,7 +1536,7 @@
       }
     });
     
-    // Search YouTube videos
+    // Search YouTube videos - MODIFIED FOR ELECTRON
     async function searchYouTube() {
       const query = searchQuery.value.trim();
       if (!query) return alert('Please enter a search term.');
@@ -1534,10 +1547,16 @@
       saveUserPreferences();
       
       try {
-        const res = await fetch(`${backendURL}/youtube-search?q=${encodeURIComponent(query)}`);
-        if (!res.ok) throw new Error('Search failed');
-        
-        const data = await res.json();
+        let data;
+        if (isElectron) {
+          // Use Electron IPC for search
+          data = await window.electronAPI.youtubeSearch(query);
+        } else {
+          // Web version using fetch
+          const res = await fetch(`${backendURL}/youtube-search?q=${encodeURIComponent(query)}`);
+          if (!res.ok) throw new Error('Search failed');
+          data = await res.json();
+        }
         
         if (!data.items || data.items.length === 0) {
           resultsDiv.innerHTML = `
@@ -1594,12 +1613,21 @@
         });
         
       } catch (err) {
-        resultsDiv.innerHTML = `
-          <div class="error-message">
-            <i class="fas fa-exclamation-triangle"></i>
-            <p>Error searching videos. Please try again!</p>
-          </div>
-        `;
+        if (isElectron) {
+          window.electronAPI.showMessageBox({
+            type: 'error',
+            title: 'Search Error',
+            message: 'Failed to search YouTube',
+            detail: err.message
+          });
+        } else {
+          resultsDiv.innerHTML = `
+            <div class="error-message">
+              <i class="fas fa-exclamation-triangle"></i>
+              <p>Error searching videos. Please try again!</p>
+            </div>
+          `;
+        }
         console.error('Search error:', err);
       }
     }
@@ -1629,14 +1657,21 @@
       }
     }
     
-    // Download and play video
+    // Download and play video - MODIFIED FOR ELECTRON
     async function downloadAndPlay(videoId) {
       resultsDiv.innerHTML = '<div class="loading"><i class="fas fa-download"></i>Downloading dance video... Please wait!</div>';
       
       try {
-        const res = await fetch(`${backendURL}/download?id=${videoId}`);
-        if (!res.ok) throw new Error('Download failed');
-        const data = await res.json();
+        let data;
+        if (isElectron) {
+          // Use Electron IPC for download
+          data = await window.electronAPI.downloadVideo(videoId);
+        } else {
+          // Web version using fetch
+          const res = await fetch(`${backendURL}/download?id=${videoId}`);
+          if (!res.ok) throw new Error('Download failed');
+          data = await res.json();
+        }
         
         if (!data.url) throw new Error('No video URL returned');
         
@@ -1650,7 +1685,8 @@
         videoTitle.textContent = cleanTitle || 'Dance Tutorial';
         videoTitle.style.display = 'block';
         
-        video.src = backendURL + data.url;
+        // Set video source - handle Electron file paths
+        video.src = isElectron ? data.url : (backendURL + data.url);
         video.load();
         
         video.oncanplay = async () => {
@@ -1668,7 +1704,16 @@
           }
         };
       } catch (err) {
-        alert('Error downloading or playing video. Please try again!');
+        if (isElectron) {
+          window.electronAPI.showMessageBox({
+            type: 'error',
+            title: 'Playback Error',
+            message: 'Error playing video',
+            detail: err.message
+          });
+        } else {
+          alert('Error downloading or playing video. Please try again!');
+        }
         console.error(err);
         resultsDiv.innerHTML = '';
         videoTitle.style.display = 'none';
@@ -1816,7 +1861,15 @@
       loopEndTime = Math.min(video.duration || 10, loopEndTime);
       
       if (loopStartTime >= loopEndTime) {
-        alert('Loop start must be less than loop end.');
+        if (isElectron) {
+          window.electronAPI.showMessageBox({
+            type: 'warning',
+            title: 'Invalid Loop',
+            message: 'Loop start must be less than loop end'
+          });
+        } else {
+          alert('Loop start must be less than loop end.');
+        }
         return;
       }
       
@@ -2074,6 +2127,31 @@
     window.addEventListener('beforeunload', () => {
       saveUserPreferences();
     });
+    
+    // Add close button for Electron app
+    if (isElectron) {
+      document.addEventListener('DOMContentLoaded', () => {
+        const header = document.querySelector('.header');
+        if (header) {
+          const closeBtn = document.createElement('button');
+          closeBtn.innerHTML = '<i class="fas fa-times"></i>';
+          closeBtn.style.cssText = `
+            background: none;
+            border: none;
+            color: #8a7a6d;
+            font-size: 1.5rem;
+            cursor: pointer;
+            margin-left: auto;
+            padding: 0 15px;
+          `;
+          closeBtn.addEventListener('click', () => {
+            const { remote } = require('electron');
+            remote.getCurrentWindow().close();
+          });
+          header.appendChild(closeBtn);
+        }
+      });
+    }
   </script>
 </body>
 </html>
