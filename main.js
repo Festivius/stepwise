@@ -2,6 +2,108 @@ const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const axios = require('axios');
+const express = require('express'); // Add this import
+const cors = require('cors'); // Add this import if you have it
+
+// Add to your main.js after the existing imports
+const { autoUpdater } = require('electron-updater');
+
+// Configure auto-updater
+autoUpdater.checkForUpdatesAndNotify();
+autoUpdater.autoDownload = false; // Don't auto-download, ask user first
+
+// Auto-updater event handlers
+autoUpdater.on('checking-for-update', () => {
+  console.log('🔍 Checking for update...');
+});
+
+autoUpdater.on('update-available', (info) => {
+  console.log('✅ Update available:', info.version);
+  
+  // Show dialog to user
+  dialog.showMessageBox(mainWindow, {
+    type: 'info',
+    title: 'Update Available',
+    message: `A new version (${info.version}) is available!`,
+    detail: 'Would you like to download and install it?',
+    buttons: ['Download Update', 'Later'],
+    defaultId: 0
+  }).then((result) => {
+    if (result.response === 0) {
+      autoUpdater.downloadUpdate();
+      
+      // Show download progress (optional)
+      dialog.showMessageBox(mainWindow, {
+        type: 'info',
+        title: 'Downloading Update',
+        message: 'Downloading update... The app will restart when ready.',
+        buttons: ['OK']
+      });
+    }
+  });
+});
+
+autoUpdater.on('update-not-available', () => {
+  console.log('✅ App is up to date');
+});
+
+autoUpdater.on('error', (err) => {
+  console.error('❌ Auto-updater error:', err);
+});
+
+autoUpdater.on('download-progress', (progressObj) => {
+  let log_message = `Download speed: ${progressObj.bytesPerSecond}`;
+  log_message = log_message + ` - Downloaded ${progressObj.percent}%`;
+  log_message = log_message + ` (${progressObj.transferred}/${progressObj.total})`;
+  console.log('⬇️ Update progress:', log_message);
+});
+
+autoUpdater.on('update-downloaded', () => {
+  console.log('✅ Update downloaded');
+  
+  dialog.showMessageBox(mainWindow, {
+    type: 'info',
+    title: 'Update Ready',
+    message: 'Update downloaded. The application will restart to apply the update.',
+    buttons: ['Restart Now', 'Later'],
+    defaultId: 0
+  }).then((result) => {
+    if (result.response === 0) {
+      autoUpdater.quitAndInstall();
+    }
+  });
+});
+
+// Add menu item for manual update check
+function createMenu() {
+  const template = [
+    {
+      label: 'Help',
+      submenu: [
+        {
+          label: 'Check for Updates',
+          click: () => {
+            autoUpdater.checkForUpdatesAndNotify();
+          }
+        },
+        {
+          label: 'About Stepwise Studio',
+          click: () => {
+            dialog.showMessageBox(mainWindow, {
+              type: 'info',
+              title: 'About Stepwise Studio',
+              message: `Stepwise Studio v${app.getVersion()}`,
+              detail: 'Precision • Dance • Control'
+            });
+          }
+        }
+      ]
+    }
+  ];
+  
+  const menu = require('electron').Menu.buildFromTemplate(template);
+  require('electron').Menu.setApplicationMenu(menu);
+}
 
 let mainWindow;
 
@@ -15,10 +117,59 @@ if (!fs.existsSync(videosDir)) {
 // Set environment variable for server
 process.env.VIDEOS_DIR = videosDir;
 
-// Start the Express server - FIXED PATH
-const server = require('./src/server.js');
-const PORT = 3001;
+// Create Express server instance - THIS WAS MISSING!
+const server = express();
+server.use(express.json());
+server.use(cors()); // Enable CORS if you have the cors package
 
+// Add your server routes here
+server.get('/youtube-search', async (req, res) => {
+  try {
+    const query = req.query.q;
+    if (!query) {
+      return res.status(400).json({ error: 'Search query is required' });
+    }
+
+    // Add your YouTube search logic here
+    // This is a placeholder - you'll need to implement the actual search
+    console.log('🔍 Searching YouTube for:', query);
+    
+    // For now, return empty results
+    res.json({ items: [] });
+    
+  } catch (error) {
+    console.error('❌ YouTube search error:', error);
+    res.status(500).json({ error: 'Search failed' });
+  }
+});
+
+server.get('/download', async (req, res) => {
+  try {
+    const videoId = req.query.id;
+    if (!videoId) {
+      return res.status(400).json({ error: 'Video ID is required' });
+    }
+
+    // Add your video download logic here
+    console.log('⬇️ Downloading video:', videoId);
+    
+    const outputPath = path.join(videosDir, `${videoId}.mp4`);
+    
+    // This is a placeholder - you'll need to implement the actual download
+    // For now, return a mock response
+    res.json({ 
+      url: `file:///${path.resolve(outputPath).replace(/\\/g, '/')}`,
+      message: 'Download completed'
+    });
+    
+  } catch (error) {
+    console.error('❌ Download error:', error);
+    res.status(500).json({ error: 'Download failed' });
+  }
+});
+
+// Start the Express server
+const PORT = 3001;
 let serverInstance;
 
 function startServer() {
@@ -86,6 +237,9 @@ app.whenReady().then(async () => {
     
     // Create window
     createWindow();
+    
+    // Create menu
+    createMenu();
     
     console.log('✅ Stepwise Studio ready!');
   } catch (err) {
