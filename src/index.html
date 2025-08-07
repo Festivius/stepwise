@@ -1197,11 +1197,16 @@
   <div class="save-notification" id="saveNotification">Video saved!</div>
 
   <script>
-    // Check if we're running in Electron - FIXED
+    // Check if we're running in Electron
     const isElectronApp = !!(window.electronAPI && window.electronAPI.getAppVersion);
 
+    if (!isElectronApp) {
+      console.error('This application requires Electron to run');
+      alert('This application must be run through Electron');
+    }
+
+    // Set app version in footer
     if (window.electronAPI) {
-      // Set app version in footer
       window.electronAPI.getAppVersion().then(version => {
         const footer = document.querySelector('.footer p');
         if (footer) {
@@ -1210,15 +1215,13 @@
       });
     }
 
-    const backendURL = isElectronApp ? 'http://127.0.0.1:3001' : 'http://localhost:3000';
-    
-    // Cookie utility functions
+    // Cookie utility functions (same as before)
     function setCookie(name, value, days = 30) {
       const expires = new Date();
       expires.setTime(expires.getTime() + (days * 24 * 60 * 60 * 1000));
       document.cookie = `${name}=${JSON.stringify(value)};expires=${expires.toUTCString()};path=/`;
     }
-    
+
     function getCookie(name) {
       const nameEQ = name + "=";
       const ca = document.cookie.split(';');
@@ -1235,76 +1238,8 @@
       }
       return null;
     }
-    
-    function deleteCookie(name) {
-      document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
-    }
-    
-    // Save user preferences to cookies
-    function saveUserPreferences() {
-      const preferences = {
-        volume: video.volume,
-        playbackRate: video.playbackRate,
-        loopMode: isLoopMode,
-        loopStartTime: loopStartTime,
-        loopEndTime: loopEndTime,
-        mirrorMode: video.classList.contains('mirror-video'),
-        lastSearchQuery: searchQuery.value
-      };
-      setCookie('stepwisePreferences', preferences);
-    }
-    
-    // Load user preferences from cookies
-    function loadUserPreferences() {
-      const preferences = getCookie('stepwisePreferences');
-      if (preferences) {
-        // Apply volume setting
-        if (preferences.volume !== undefined) {
-          video.volume = preferences.volume;
-          volumeSlider.value = preferences.volume;
-          updateVolumeIcon();
-        }
-        
-        // Apply playback rate
-        if (preferences.playbackRate !== undefined) {
-          video.playbackRate = preferences.playbackRate;
-          const speedIndex = speeds.indexOf(preferences.playbackRate);
-          if (speedIndex !== -1) {
-            currentSpeedIndex = speedIndex;
-            speedBtn.textContent = `${preferences.playbackRate}x`;
-          }
-        }
-        
-        // Apply loop settings
-        if (preferences.loopMode !== undefined) {
-          isLoopMode = preferences.loopMode;
-          if (preferences.loopStartTime !== undefined) loopStartTime = preferences.loopStartTime;
-          if (preferences.loopEndTime !== undefined) loopEndTime = preferences.loopEndTime;
-          
-          if (isLoopMode) {
-            loopBtn.classList.add('active');
-            loopRange.style.display = 'block';
-            loopStartHandle.style.display = 'block';
-            loopEndHandle.style.display = 'block';
-            loopIndicator.style.display = 'block';
-            loopHighlight.classList.add('active');
-          }
-        }
-        
-        // Apply mirror mode
-        if (preferences.mirrorMode) {
-          video.classList.add('mirror-video');
-          mirrorBtn.classList.add('active');
-        }
-        
-        // Restore last search query
-        if (preferences.lastSearchQuery) {
-          searchQuery.value = preferences.lastSearchQuery;
-        }
-      }
-    }
-    
-    // DOM Elements
+
+    // DOM Elements (same as before)
     const searchBtn = document.getElementById('searchBtn');
     const searchQuery = document.getElementById('searchQuery');
     const resultsDiv = document.getElementById('results');
@@ -1336,15 +1271,15 @@
     const savedVideosContainer = document.getElementById('savedVideosContainer');
     const clearSavedBtn = document.getElementById('clearSaved');
     const saveNotification = document.getElementById('saveNotification');
-    
+
     // Playback bar elements
     const progressContainer = document.querySelector('.progress-container');
     const playbackBar = document.querySelector('.playback-bar');
     const playbackProgress = document.getElementById('playbackProgress');
     const currentTimeLabel = document.getElementById('currentTimeLabel');
     const durationLabel = document.getElementById('durationLabel');
-    
-    // Variables
+
+    // Variables (same as before)
     let loopAnimationFrame = null;
     let lastVideoTitle = '';
     let lastVideoId = '';
@@ -1361,182 +1296,70 @@
     // Speed control
     const speeds = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2];
     let currentSpeedIndex = 3; // 1x is default
-    
+
     // Initialize
     loadUserPreferences();
     updateSavedVideos();
-    
-    // Update volume icon based on current volume
-    function updateVolumeIcon() {
-      if (video.volume === 0) {
-        volumeIcon.className = 'fas fa-volume-mute';
-      } else if (video.volume < 0.5) {
-        volumeIcon.className = 'fas fa-volume-down';
-      } else {
-        volumeIcon.className = 'fas fa-volume-up';
-      }
+
+    // All the utility functions (same as before)
+    function saveUserPreferences() {
+      const preferences = {
+        volume: video.volume,
+        playbackRate: video.playbackRate,
+        loopMode: isLoopMode,
+        loopStartTime: loopStartTime,
+        loopEndTime: loopEndTime,
+        mirrorMode: video.classList.contains('mirror-video'),
+        lastSearchQuery: searchQuery.value
+      };
+      setCookie('stepwisePreferences', preferences);
     }
-    
-    // Save current video
-    saveBtn.addEventListener('click', () => {
-      if (!lastVideoId) return;
-      
-      // Check if video is already saved
-      const isSaved = savedVideos.some(video => video.id === lastVideoId);
-      
-      if (!isSaved) {
-        savedVideos.push({
-          id: lastVideoId,
-          title: lastVideoTitle,
-          thumbnail: lastThumbnail,
-          savedAt: new Date().toISOString()
-        });
+
+    function loadUserPreferences() {
+      const preferences = getCookie('stepwisePreferences');
+      if (preferences) {
+        if (preferences.volume !== undefined) {
+          video.volume = preferences.volume;
+          volumeSlider.value = preferences.volume;
+          updateVolumeIcon();
+        }
         
-        setCookie('savedVideos', savedVideos);
-        updateSavedVideos();
-        
-        // Show save confirmation
-        saveNotification.textContent = 'Video saved!';
-        saveNotification.style.display = 'block';
-        setTimeout(() => {
-          saveNotification.style.display = 'none';
-        }, 3000);
-        
-        saveIcon.className = 'fas fa-bookmark';
-      }
-    });
-    
-    // Clear all saved videos
-    clearSavedBtn.addEventListener('click', () => {
-      if (confirm('Are you sure you want to clear all saved videos?')) {
-        savedVideos = [];
-        setCookie('savedVideos', savedVideos);
-        updateSavedVideos();
-        
-        saveNotification.textContent = 'All videos cleared!';
-        saveNotification.style.display = 'block';
-        setTimeout(() => {
-          saveNotification.style.display = 'none';
-        }, 3000);
-      }
-    });
-    
-    // Update saved videos display
-    function updateSavedVideos() {
-      savedVideosContainer.innerHTML = '';
-      
-      if (savedVideos.length === 0) {
-        savedVideosContainer.innerHTML = `
-          <div class="empty-saved">
-            <i class="fas fa-bookmark"></i>
-            <p>No saved videos yet</p>
-            <p>Save videos to watch later</p>
-          </div>
-        `;
-        return;
-      }
-      
-      // Sort by saved date (newest first)
-      const sortedVideos = [...savedVideos].sort((a, b) => 
-        new Date(b.savedAt || 0) - new Date(a.savedAt || 0)
-      );
-      
-      sortedVideos.forEach(video => {
-        const videoElement = document.createElement('div');
-        videoElement.className = 'saved-video';
-        videoElement.innerHTML = `
-          <img src="${video.thumbnail}" alt="${video.title}" class="saved-thumb">
-          <div class="saved-details">
-            <div class="saved-video-title">${video.title}</div>
-          </div>
-          <div class="saved-actions">
-            <button class="saved-btn play-saved" data-id="${video.id}" title="Play Video">
-              <i class="fas fa-play"></i>
-            </button>
-            <button class="saved-btn remove-saved" data-id="${video.id}" title="Remove from Saved">
-              <i class="fas fa-trash"></i>
-            </button>
-          </div>
-        `;
-        
-        savedVideosContainer.appendChild(videoElement);
-      });
-      
-      // Add event listeners to play and remove buttons
-      document.querySelectorAll('.play-saved').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const videoId = btn.getAttribute('data-id');
-          const video = savedVideos.find(v => v.id === videoId);
-          if (video) {
-            lastVideoTitle = video.title;
-            lastVideoId = video.id;
-            lastThumbnail = video.thumbnail;
-            downloadAndPlay(videoId);
+        if (preferences.playbackRate !== undefined) {
+          video.playbackRate = preferences.playbackRate;
+          const speedIndex = speeds.indexOf(preferences.playbackRate);
+          if (speedIndex !== -1) {
+            currentSpeedIndex = speedIndex;
+            speedBtn.textContent = `${preferences.playbackRate}x`;
           }
-        });
-      });
-      
-      document.querySelectorAll('.remove-saved').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const videoId = btn.getAttribute('data-id');
-          removeSavedVideo(videoId);
-        });
-      });
-    }
-    
-    // Remove saved video
-    function removeSavedVideo(videoId) {
-      savedVideos = savedVideos.filter(video => video.id !== videoId);
-      setCookie('savedVideos', savedVideos);
-      updateSavedVideos();
-      
-      // Show remove confirmation
-      saveNotification.textContent = 'Video removed!';
-      saveNotification.style.display = 'block';
-      setTimeout(() => {
-        saveNotification.style.display = 'none';
-      }, 3000);
-    }
-    
-    // YouTube-like keyboard controls
-    document.addEventListener('keydown', (e) => {
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
-      
-      switch(e.key) {
-        case ' ':
-          e.preventDefault();
-          togglePlayPause();
-          showPauseAnimation();
-          break;
-        case 'ArrowLeft':
-          e.preventDefault();
-          skipVideo(-5);
-          break;
-        case 'ArrowRight':
-          e.preventDefault();
-          skipVideo(5);
-          break;
-        case 'f':
-        case 'F':
-          e.preventDefault();
-          toggleFullscreen();
-          break;
-        case 'm':
-        case 'M':
-          e.preventDefault();
-          toggleMirror();
-          break;
-        case 'l':
-        case 'L':
-          e.preventDefault();
-          toggleLoopMode();
-          break;
+        }
+        
+        if (preferences.loopMode !== undefined) {
+          isLoopMode = preferences.loopMode;
+          if (preferences.loopStartTime !== undefined) loopStartTime = preferences.loopStartTime;
+          if (preferences.loopEndTime !== undefined) loopEndTime = preferences.loopEndTime;
+          
+          if (isLoopMode) {
+            loopBtn.classList.add('active');
+            loopRange.style.display = 'block';
+            loopStartHandle.style.display = 'block';
+            loopEndHandle.style.display = 'block';
+            loopIndicator.style.display = 'block';
+            loopHighlight.classList.add('active');
+          }
+        }
+        
+        if (preferences.mirrorMode) {
+          video.classList.add('mirror-video');
+          mirrorBtn.classList.add('active');
+        }
+        
+        if (preferences.lastSearchQuery) {
+          searchQuery.value = preferences.lastSearchQuery;
+        }
       }
-    });
-    
-    // Search YouTube videos - MODIFIED FOR ELECTRON
+    }
+
+    // Search YouTube videos - SIMPLIFIED FOR ELECTRON ONLY
     async function searchYouTube() {
       const query = searchQuery.value.trim();
       if (!query) return alert('Please enter a search term.');
@@ -1547,16 +1370,8 @@
       saveUserPreferences();
       
       try {
-        let data;
-        if (isElectronApp) {
-          // Use Electron IPC for search
-          data = await window.electronAPI.youtubeSearch(query);
-        } else {
-          // Web version using fetch
-          const res = await fetch(`${backendURL}/youtube-search?q=${encodeURIComponent(query)}`);
-          if (!res.ok) throw new Error('Search failed');
-          data = await res.json();
-        }
+        // Use Electron IPC for search
+        const data = await window.electronAPI.youtubeSearch(query);
         
         if (!data.items || data.items.length === 0) {
           resultsDiv.innerHTML = `
@@ -1614,14 +1429,12 @@
         
       } catch (err) {
         console.error('Search error:', err);
-        if (isElectronApp && window.electronAPI.showMessageBox) {
-          window.electronAPI.showMessageBox({
-            type: 'error',
-            title: 'Search Error',
-            message: 'Failed to search YouTube',
-            detail: err.message
-          });
-        }
+        window.electronAPI.showMessageBox({
+          type: 'error',
+          title: 'Search Error',
+          message: 'Failed to search YouTube',
+          detail: err.message
+        });
         resultsDiv.innerHTML = `
           <div class="error-message">
             <i class="fas fa-exclamation-triangle"></i>
@@ -1631,47 +1444,14 @@
         `;
       }
     }
-    
-    // Save video function
-    function saveVideo(videoId, title, thumbnail) {
-      // Check if video is already saved
-      const isSaved = savedVideos.some(video => video.id === videoId);
-      
-      if (!isSaved) {
-        savedVideos.push({
-          id: videoId,
-          title: title,
-          thumbnail: thumbnail,
-          savedAt: new Date().toISOString()
-        });
-        
-        setCookie('savedVideos', savedVideos);
-        updateSavedVideos();
-        
-        // Show save confirmation
-        saveNotification.textContent = 'Video saved!';
-        saveNotification.style.display = 'block';
-        setTimeout(() => {
-          saveNotification.style.display = 'none';
-        }, 3000);
-      }
-    }
-    
-    // Download and play video - MODIFIED FOR ELECTRON
+
+    // Download and play video - SIMPLIFIED FOR ELECTRON ONLY
     async function downloadAndPlay(videoId) {
       resultsDiv.innerHTML = '<div class="loading"><i class="fas fa-download"></i>Downloading dance video... Please wait!</div>';
       
       try {
-        let data;
-        if (isElectronApp) {
-          // Use Electron IPC for download
-          data = await window.electronAPI.downloadVideo(videoId);
-        } else {
-          // Web version using fetch
-          const res = await fetch(`${backendURL}/download?id=${videoId}`);
-          if (!res.ok) throw new Error('Download failed');
-          data = await res.json();
-        }
+        // Use Electron IPC for download
+        const data = await window.electronAPI.downloadVideo(videoId);
         
         if (!data.url) throw new Error('No video URL returned');
         
@@ -1685,7 +1465,7 @@
         videoTitle.textContent = cleanTitle || 'Dance Tutorial';
         videoTitle.style.display = 'block';
         
-        // Set video source - handle both Electron file:// URLs and web URLs
+        // Set video source
         video.src = data.url;
         video.load();
         
@@ -1699,38 +1479,222 @@
             }
           } catch (err) {
             console.warn('Playback prevented:', err);
-            // Fallback: Show play button instead of pause
             playIcon.className = 'fas fa-play';
           }
         };
       } catch (err) {
         console.error('Download/playback error:', err);
-        if (isElectronApp && window.electronAPI.showMessageBox) {
-          window.electronAPI.showMessageBox({
-            type: 'error',
-            title: 'Playback Error',
-            message: 'Error playing video',
-            detail: err.message
-          });
-        } else {
-          alert('Error downloading or playing video. Please try again!');
-        }
+        window.electronAPI.showMessageBox({
+          type: 'error',
+          title: 'Playback Error',
+          message: 'Error playing video',
+          detail: err.message
+        });
         resultsDiv.innerHTML = '';
         videoTitle.style.display = 'none';
       }
     }
-    
+
+    // All other functions remain the same as in your original code...
+    // (I'm keeping this shorter to focus on the main changes)
+
+    // Update volume icon based on current volume
+    function updateVolumeIcon() {
+      if (video.volume === 0) {
+        volumeIcon.className = 'fas fa-volume-mute';
+      } else if (video.volume < 0.5) {
+        volumeIcon.className = 'fas fa-volume-down';
+      } else {
+        volumeIcon.className = 'fas fa-volume-up';
+      }
+    }
+
+    // Save current video
+    saveBtn.addEventListener('click', () => {
+      if (!lastVideoId) return;
+      
+      const isSaved = savedVideos.some(video => video.id === lastVideoId);
+      
+      if (!isSaved) {
+        savedVideos.push({
+          id: lastVideoId,
+          title: lastVideoTitle,
+          thumbnail: lastThumbnail,
+          savedAt: new Date().toISOString()
+        });
+        
+        setCookie('savedVideos', savedVideos);
+        updateSavedVideos();
+        
+        saveNotification.textContent = 'Video saved!';
+        saveNotification.style.display = 'block';
+        setTimeout(() => {
+          saveNotification.style.display = 'none';
+        }, 3000);
+        
+        saveIcon.className = 'fas fa-bookmark';
+      }
+    });
+
+    // Clear all saved videos
+    clearSavedBtn.addEventListener('click', () => {
+      if (confirm('Are you sure you want to clear all saved videos?')) {
+        savedVideos = [];
+        setCookie('savedVideos', savedVideos);
+        updateSavedVideos();
+        
+        saveNotification.textContent = 'All videos cleared!';
+        saveNotification.style.display = 'block';
+        setTimeout(() => {
+          saveNotification.style.display = 'none';
+        }, 3000);
+      }
+    });
+
+    // Update saved videos display
+    function updateSavedVideos() {
+      savedVideosContainer.innerHTML = '';
+      
+      if (savedVideos.length === 0) {
+        savedVideosContainer.innerHTML = `
+          <div class="empty-saved">
+            <i class="fas fa-bookmark"></i>
+            <p>No saved videos yet</p>
+            <p>Save videos to watch later</p>
+          </div>
+        `;
+        return;
+      }
+      
+      const sortedVideos = [...savedVideos].sort((a, b) => 
+        new Date(b.savedAt || 0) - new Date(a.savedAt || 0)
+      );
+      
+      sortedVideos.forEach(video => {
+        const videoElement = document.createElement('div');
+        videoElement.className = 'saved-video';
+        videoElement.innerHTML = `
+          <img src="${video.thumbnail}" alt="${video.title}" class="saved-thumb">
+          <div class="saved-details">
+            <div class="saved-video-title">${video.title}</div>
+          </div>
+          <div class="saved-actions">
+            <button class="saved-btn play-saved" data-id="${video.id}" title="Play Video">
+              <i class="fas fa-play"></i>
+            </button>
+            <button class="saved-btn remove-saved" data-id="${video.id}" title="Remove from Saved">
+              <i class="fas fa-trash"></i>
+            </button>
+          </div>
+        `;
+        
+        savedVideosContainer.appendChild(videoElement);
+      });
+      
+      // Add event listeners
+      document.querySelectorAll('.play-saved').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const videoId = btn.getAttribute('data-id');
+          const video = savedVideos.find(v => v.id === videoId);
+          if (video) {
+            lastVideoTitle = video.title;
+            lastVideoId = video.id;
+            lastThumbnail = video.thumbnail;
+            downloadAndPlay(videoId);
+          }
+        });
+      });
+      
+      document.querySelectorAll('.remove-saved').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const videoId = btn.getAttribute('data-id');
+          removeSavedVideo(videoId);
+        });
+      });
+    }
+
+    // Save video function
+    function saveVideo(videoId, title, thumbnail) {
+      const isSaved = savedVideos.some(video => video.id === videoId);
+      
+      if (!isSaved) {
+        savedVideos.push({
+          id: videoId,
+          title: title,
+          thumbnail: thumbnail,
+          savedAt: new Date().toISOString()
+        });
+        
+        setCookie('savedVideos', savedVideos);
+        updateSavedVideos();
+        
+        saveNotification.textContent = 'Video saved!';
+        saveNotification.style.display = 'block';
+        setTimeout(() => {
+          saveNotification.style.display = 'none';
+        }, 3000);
+      }
+    }
+
+    // Remove saved video
+    function removeSavedVideo(videoId) {
+      savedVideos = savedVideos.filter(video => video.id !== videoId);
+      setCookie('savedVideos', savedVideos);
+      updateSavedVideos();
+      
+      saveNotification.textContent = 'Video removed!';
+      saveNotification.style.display = 'block';
+      setTimeout(() => {
+        saveNotification.style.display = 'none';
+      }, 3000);
+    }
+
+    // YouTube-like keyboard controls
+    document.addEventListener('keydown', (e) => {
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+      
+      switch(e.key) {
+        case ' ':
+          e.preventDefault();
+          togglePlayPause();
+          showPauseAnimation();
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          skipVideo(-5);
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          skipVideo(5);
+          break;
+        case 'f':
+        case 'F':
+          e.preventDefault();
+          toggleFullscreen();
+          break;
+        case 'm':
+        case 'M':
+          e.preventDefault();
+          toggleMirror();
+          break;
+        case 'l':
+        case 'L':
+          e.preventDefault();
+          toggleLoopMode();
+          break;
+      }
+    });
+
     // Reset all controls to default
     function resetControls() {
-      // Reset playback rate
       video.playbackRate = 1;
       speedBtn.textContent = '1x';
       
-      // Reset mirror
       video.classList.remove('mirror-video');
       mirrorBtn.classList.remove('active');
       
-      // Reset loop mode
       isLoopMode = false;
       loopBtn.classList.remove('active');
       loopRange.style.display = 'none';
@@ -1740,27 +1704,22 @@
       loopHighlight.classList.remove('active');
       stopLoop();
       
-      // Reset volume
       video.volume = 1;
       volumeSlider.value = 1;
       updateVolumeIcon();
       
-      // Reset time display
       currentTimeLabel.textContent = '0:00';
       durationLabel.textContent = '0:00';
       
-      // Reset progress bar
       playbackProgress.style.width = '0%';
       
-      // Reset save icon
       saveIcon.className = 'far fa-bookmark';
       
-      // Load user preferences after reset
       setTimeout(() => {
         loadUserPreferences();
       }, 100);
     }
-    
+
     // Play/Pause toggle
     function togglePlayPause() {
       if (video.paused) {
@@ -1771,21 +1730,18 @@
         playIcon.className = 'fas fa-play';
       }
     }
-    
+
     // YouTube-like skip animation
     function skipVideo(seconds) {
       const oldTime = video.currentTime;
       video.currentTime = Math.max(0, Math.min(video.duration, oldTime + seconds));
       
-      // Set skip icon based on direction
       skipIcon.className = seconds > 0 ? 'fas fa-forward' : 'fas fa-backward';
       
-      // Position skip animation at the click point
       const rect = playbackBar.getBoundingClientRect();
       const percent = (oldTime / video.duration) * 100;
       skipAnimation.style.left = `${(percent / 100) * rect.width}px`;
       
-      // Show YouTube-like skip animation
       skipAnimation.style.display = 'flex';
       skipAnimation.classList.add('visible');
       
@@ -1796,14 +1752,14 @@
         }, 300);
       }, 800);
     }
-    
+
     // Toggle mirror
     function toggleMirror() {
       video.classList.toggle('mirror-video');
       mirrorBtn.classList.toggle('active');
       saveUserPreferences();
     }
-    
+
     // Toggle fullscreen
     function toggleFullscreen() {
       if (!document.fullscreenElement) {
@@ -1818,7 +1774,7 @@
         isFullscreen = false;
       }
     }
-    
+
     // Fullscreen change handler
     document.addEventListener('fullscreenchange', () => {
       if (!document.fullscreenElement) {
@@ -1827,7 +1783,7 @@
         isFullscreen = false;
       }
     });
-    
+
     // Toggle loop mode
     function toggleLoopMode() {
       isLoopMode = !isLoopMode;
@@ -1839,7 +1795,6 @@
       loopHighlight.classList.toggle('active', isLoopMode);
       
       if (isLoopMode) {
-        // Set loop range from current position to 10 seconds ahead
         loopStartTime = video.currentTime;
         loopEndTime = Math.min(video.duration, video.currentTime + 10);
         updateLoopRangeDisplay();
@@ -1851,52 +1806,40 @@
       
       saveUserPreferences();
     }
-    
+
     // Start seamless loop
     function startLoop() {
-      stopLoop(); // Clear any existing loop
+      stopLoop();
       
-      // Validate loop times
       loopStartTime = Math.max(0, loopStartTime);
       loopEndTime = Math.min(video.duration || 10, loopEndTime);
       
       if (loopStartTime >= loopEndTime) {
-        if (isElectronApp) {
-          window.electronAPI.showMessageBox({
-            type: 'warning',
-            title: 'Invalid Loop',
-            message: 'Loop start must be less than loop end'
-          });
-        } else {
-          alert('Loop start must be less than loop end.');
-        }
+        window.electronAPI.showMessageBox({
+          type: 'warning',
+          title: 'Invalid Loop',
+          message: 'Loop start must be less than loop end'
+        });
         return;
       }
       
-      // Create seamless loop using requestAnimationFrame
       function seamlessLoop() {
         if (!isLoopMode) return;
         
-        // Get the current time with a small buffer
         const currentTime = video.currentTime;
-        const buffer = 0.05; // 50ms buffer for smoother transition
+        const buffer = 0.05;
         
-        // Check if we're at the end of the loop
         if (currentTime >= loopEndTime - buffer) {
-          // Calculate how far we are into the buffer zone
           const bufferProgress = (currentTime - (loopEndTime - buffer)) / buffer;
-          
-          // Set to start with a slight overlap for smooth transition
           video.currentTime = loopStartTime + (bufferProgress * buffer);
         }
         
         loopAnimationFrame = requestAnimationFrame(seamlessLoop);
       }
       
-      // Start the loop
       loopAnimationFrame = requestAnimationFrame(seamlessLoop);
     }
-    
+
     // Stop loop
     function stopLoop() {
       if (loopAnimationFrame) {
@@ -1904,33 +1847,30 @@
         loopAnimationFrame = null;
       }
     }
-    
+
     // Update loop range display
     function updateLoopRangeDisplay() {
       if (video.duration) {
         const startPercent = Math.max(0, (loopStartTime / video.duration) * 100);
         const endPercent = Math.min(100, (loopEndTime / video.duration) * 100);
         
-        // Position the loop range
         loopRange.style.left = `${startPercent}%`;
         loopRange.style.width = `${Math.max(0, endPercent - startPercent)}%`;
         
-        // Position handles with bounds checking
-        loopStartHandle.style.left = `${startPercent-100}%`;
-        loopEndHandle.style.left = `${endPercent-100}%`;
+        loopStartHandle.style.left = `${startPercent}%`;
+        loopEndHandle.style.left = `${endPercent}%`;
         
-        // Ensure handles are visible
         loopStartHandle.style.display = 'block';
         loopEndHandle.style.display = 'block';
       }
     }
-    
+
     // Update loop indicator
     function updateLoopIndicator() {
       loopStartLabel.textContent = formatTime(loopStartTime);
       loopEndLabel.textContent = formatTime(loopEndTime);
     }
-    
+
     // Show pause animation
     function showPauseAnimation() {
       pauseIcon.className = video.paused ? 'fas fa-play' : 'fas fa-pause';
@@ -1939,22 +1879,21 @@
         pauseAnimation.classList.remove('visible');
       }, 500);
     }
-    
+
     // Event listeners
     playPauseBtn.addEventListener('click', () => {
       togglePlayPause();
       showPauseAnimation();
     });
-    
+
     video.addEventListener('play', () => playIcon.className = 'fas fa-pause');
     video.addEventListener('pause', () => playIcon.className = 'fas fa-play');
-    
-    // Video click for play/pause with animation
+
     video.addEventListener('click', () => {
       togglePlayPause();
       showPauseAnimation();
     });
-    
+
     speedBtn.addEventListener('click', () => {
       currentSpeedIndex = (currentSpeedIndex + 1) % speeds.length;
       const speed = speeds[currentSpeedIndex];
@@ -1962,7 +1901,7 @@
       speedBtn.textContent = `${speed}x`;
       saveUserPreferences();
     });
-    
+
     loopBtn.addEventListener('click', toggleLoopMode);
     mirrorBtn.addEventListener('click', toggleMirror);
     fullscreenBtn.addEventListener('click', toggleFullscreen);
@@ -1970,14 +1909,14 @@
     skipForwardBtn.addEventListener('click', () => skipVideo(5));
     searchBtn.addEventListener('click', searchYouTube);
     searchQuery.addEventListener('keypress', (e) => e.key === 'Enter' && searchYouTube());
-    
-    // Volume control with preference saving
+
+    // Volume control
     volumeSlider.addEventListener('input', () => {
       video.volume = volumeSlider.value;
       updateVolumeIcon();
       saveUserPreferences();
     });
-    
+
     volumeBtn.addEventListener('click', () => {
       if (video.volume > 0) {
         video.volume = 0;
@@ -1989,18 +1928,17 @@
       updateVolumeIcon();
       saveUserPreferences();
     });
-    
+
     // Save preferences when search query changes
     searchQuery.addEventListener('input', () => {
       saveUserPreferences();
     });
-    
+
     // Playback bar functionality
     video.addEventListener('loadedmetadata', () => {
       durationLabel.textContent = formatTime(video.duration);
-      // Reset loop times when a new video loads with proper bounds
       loopStartTime = 0;
-      loopEndTime = Math.min(video.duration * 0.95, 10); // Don't go to 100% of duration
+      loopEndTime = Math.min(video.duration * 0.95, 10);
       
       if (isLoopMode) {
         updateLoopRangeDisplay();
@@ -2008,16 +1946,15 @@
         startLoop();
       }
     });
-    
+
     video.addEventListener('timeupdate', () => {
       currentTimeLabel.textContent = formatTime(video.currentTime);
       const percent = video.duration ? (video.currentTime / video.duration) * 100 : 0;
       playbackProgress.style.width = percent + '%';
     });
-    
+
     // Progress bar click for seeking
     progressContainer.addEventListener('mousedown', (e) => {
-      // Prevent seeking when dragging loop handles
       if (isDraggingLoopHandle) return;
       
       const rect = playbackBar.getBoundingClientRect();
@@ -2025,7 +1962,6 @@
       const percent = Math.max(0, Math.min(1, x / rect.width));
       const seekTime = percent * video.duration;
       
-      // If we're in loop mode and clicking beyond the end handle
       if (isLoopMode && seekTime > loopEndTime) {
         video.currentTime = loopStartTime;
         if (video.paused) {
@@ -2037,14 +1973,13 @@
       
       video.currentTime = seekTime;
     });
-    
+
     // Loop handles dragging
     loopStartHandle.addEventListener('mousedown', (e) => {
       e.stopPropagation();
       isDraggingLoopHandle = true;
       currentDragHandle = 'start';
       
-      // Activate loop mode if not already active
       if (!isLoopMode) {
         toggleLoopMode();
       }
@@ -2052,13 +1987,12 @@
       document.addEventListener('mousemove', dragLoopHandle);
       document.addEventListener('mouseup', stopDragLoopHandle);
     });
-    
+
     loopEndHandle.addEventListener('mousedown', (e) => {
       e.stopPropagation();
       isDraggingLoopHandle = true;
       currentDragHandle = 'end';
       
-      // Activate loop mode if not already active
       if (!isLoopMode) {
         toggleLoopMode();
       }
@@ -2066,18 +2000,17 @@
       document.addEventListener('mousemove', dragLoopHandle);
       document.addEventListener('mouseup', stopDragLoopHandle);
     });
-    
+
     function dragLoopHandle(e) {
       if (!isDraggingLoopHandle || !video.duration) return;
       
       const rect = playbackBar.getBoundingClientRect();
       const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
-      const percent = (x / rect.width) * 100; // Convert to percentage
+      const percent = (x / rect.width) * 100;
       const time = (percent / 100) * video.duration;
       
       if (currentDragHandle === 'start') {
         loopStartTime = Math.max(0, Math.min(loopEndTime - 0.1, time));
-        // Seek video to the new start position
         video.currentTime = loopStartTime;
       } else {
         loopEndTime = Math.min(video.duration, Math.max(loopStartTime + 0.1, time));
@@ -2087,18 +2020,17 @@
       updateLoopIndicator();
       saveUserPreferences();
       
-      // Start/update the loop if we're in loop mode
       if (isLoopMode) {
         startLoop();
       }
     }
-    
+
     function stopDragLoopHandle() {
       isDraggingLoopHandle = false;
       document.removeEventListener('mousemove', dragLoopHandle);
       document.removeEventListener('mouseup', stopDragLoopHandle);
     }
-    
+
     // Format time as mm:ss
     function formatTime(sec) {
       if (!isFinite(sec)) return '0:00';
@@ -2106,11 +2038,11 @@
       const s = Math.floor(sec % 60);
       return `${m}:${s.toString().padStart(2, '0')}`;
     }
-    
-    // Auto-save preferences when video settings change
+
+    // Auto-save preferences
     video.addEventListener('volumechange', saveUserPreferences);
     video.addEventListener('ratechange', saveUserPreferences);
-    
+
     // Welcome message for first-time users
     if (!getCookie('stepwiseWelcome')) {
       setTimeout(() => {
@@ -2122,36 +2054,11 @@
         setCookie('stepwiseWelcome', true);
       }, 1000);
     }
-    
+
     // Cleanup on page unload
     window.addEventListener('beforeunload', () => {
       saveUserPreferences();
     });
-    
-    // Add close button for Electron app
-    if (isElectronApp) {
-      document.addEventListener('DOMContentLoaded', () => {
-        const header = document.querySelector('.header');
-        if (header) {
-          const closeBtn = document.createElement('button');
-          closeBtn.innerHTML = '<i class="fas fa-times"></i>';
-          closeBtn.style.cssText = `
-            background: none;
-            border: none;
-            color: #8a7a6d;
-            font-size: 1.5rem;
-            cursor: pointer;
-            margin-left: auto;
-            padding: 0 15px;
-          `;
-          closeBtn.addEventListener('click', () => {
-            const { remote } = require('electron');
-            remote.getCurrentWindow().close();
-          });
-          header.appendChild(closeBtn);
-        }
-      });
-    }
   </script>
 </body>
 </html>
