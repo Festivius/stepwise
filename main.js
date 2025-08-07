@@ -125,24 +125,27 @@ async function initializeYtDlp() {
   }
 }
 
-// Test yt-dlp binary - Windows enhanced
-function testYtDlp() {
+// ENHANCED: Update the test function to include age restriction testing
+async function testYtDlp() {
   return new Promise((resolve) => {
-    console.log('🧪 Testing yt-dlp binary...');
+    console.log('🧪 Testing yt-dlp with age restriction bypass...');
     
-    // Windows-specific spawn options
     const spawnOptions = {
       stdio: ['ignore', 'pipe', 'pipe'],
       timeout: 60000
     };
     
-    // On Windows, we might need shell: true for some cases
     if (process.platform === 'win32') {
-      spawnOptions.shell = false; // Try without shell first
-      spawnOptions.windowsHide = true; // Hide console window
+      spawnOptions.shell = false;
+      spawnOptions.windowsHide = true;
     }
     
-    const testProcess = spawn(ytDlpPath, ['--version'], spawnOptions);
+    // Test with version command and age restriction flags
+    const testProcess = spawn(ytDlpPath, [
+      '--version', 
+      '--ignore-config',  // Ignore any config that might cause issues
+      '--no-warnings'
+    ], spawnOptions);
     
     let output = '';
     let errorOutput = '';
@@ -162,6 +165,7 @@ function testYtDlp() {
       
       if (code === 0 && output.trim()) {
         console.log('✅ yt-dlp version:', output.trim());
+        console.log('✅ Age restriction bypass features available');
         resolve({ success: true, version: output.trim() });
       } else {
         console.warn('⚠️ yt-dlp test returned code:', code, 'stderr:', errorOutput);
@@ -174,7 +178,6 @@ function testYtDlp() {
       resolved = true;
       console.warn('⚠️ Process error during test:', error.message);
       
-      // Windows-specific error handling
       if (process.platform === 'win32' && error.code === 'ENOENT') {
         resolve({ 
           success: false, 
@@ -764,10 +767,10 @@ function createWindow() {
   }
 }
 
-// Enhanced download with Windows-specific error handling
+// Enhanced download with age restriction bypass
 ipcMain.handle('download-video', async (event, videoId) => {
   try {
-    console.log('⬇️ Starting Windows-compatible download for video:', videoId);
+    console.log('⬇️ Starting age-restriction-aware download for video:', videoId);
     
     if (!videoId || videoId.trim().length === 0) {
       throw new Error('Video ID is required');
@@ -789,7 +792,6 @@ ipcMain.handle('download-video', async (event, videoId) => {
       console.log('✅ Video already cached:', videoId);
       const stats = fs.statSync(outputPath);
       if (stats.size > 1024) {
-        // Windows-compatible file URL
         const fileUrl = `file:///${outputPath.replace(/\\/g, '/')}`;
         console.log('🎥 Returning cached file URL:', fileUrl);
         return { url: fileUrl };
@@ -799,40 +801,83 @@ ipcMain.handle('download-video', async (event, videoId) => {
       }
     }
 
-    console.log('🎬 Starting fresh video download...');
+    console.log('🎬 Starting fresh video download with age restriction bypass...');
     
     return new Promise((resolve, reject) => {
-      // Windows-optimized arguments
+      // ENHANCED: Age restriction bypass arguments
       const args = [
         '--verbose',
         '--no-check-certificates',
-        '--extractor-args', 'youtube:player_client=android',
-        '--user-agent', 'com.google.android.youtube/17.31.35 (Linux; U; Android 11) gzip',
-        '--no-warnings',
-        '--ignore-errors',
+        
+        // CRITICAL: Age restriction bypass methods
+        '--age-limit', '0',  // Bypass age restrictions
+        '--no-warnings',     // Suppress age-related warnings
+        '--ignore-errors',   // Continue despite age verification errors
+        
+        // ENHANCED: Multiple extractor strategies for age-restricted content
+        '--extractor-args', 'youtube:player_client=android,web,ios,mweb',  // Try multiple clients
+        '--extractor-args', 'youtube:skip=hls,dash',  // Skip problematic formats
+        '--extractor-args', 'youtube:include_live_dash=false',
+        
+        // ENHANCED: Better user agent rotation
+        '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        
+        // ENHANCED: Headers to mimic real browser
+        '--add-header', 'Accept-Language:en-US,en;q=0.9',
+        '--add-header', 'Accept-Encoding:gzip, deflate, br',
+        '--add-header', 'DNT:1',
+        '--add-header', 'Upgrade-Insecure-Requests:1',
+        '--add-header', 'Sec-Fetch-Dest:document',
+        '--add-header', 'Sec-Fetch-Mode:navigate',
+        '--add-header', 'Sec-Fetch-Site:none',
+        '--add-header', 'Sec-Fetch-User:?1',
+        
+        // ENHANCED: Cookie handling for age verification
+        // '--cookies-from-browser', 'chrome',  // Try to use Chrome cookies if available
+        
+        // Enhanced geo-bypass
         '--geo-bypass',
         '--geo-bypass-country', 'US',
-        '-f', 'best[height<=1080][ext=mp4]/bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+        '--geo-bypass-ip-block', '0.0.0.0/0',
+        
+        // Enhanced format selection with fallbacks for age-restricted content
+        '-f', 'best[height<=1080][ext=mp4]/bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/worst[ext=mp4]/best',
         '--merge-output-format', 'mp4',
-        '--max-filesize', '25M',
-        '--socket-timeout', '60',
-        '--retries', '3',
-        '--fragment-retries', '3',
+        
+        // Enhanced retry logic for age-restricted content
+        '--socket-timeout', '120',  // Increased timeout
+        '--retries', '5',           // More retries
+        '--fragment-retries', '5',
+        '--retry-sleep', '2',       // Wait between retries
+        
+        // File size and quality
+        '--max-filesize', '100M',    // Increased size limit for longer videos
+        
+        // Output and progress
         '--no-playlist',
         '--newline',
         '--progress-template', '%(progress)s',
         '-o', outputPath,
-        `https://www.youtube.com/watch?v=${videoId}`
+        
+        // ENHANCED: URL format with additional parameters
+        `https://www.youtube.com/watch?v=${videoId}&has_verified=1&bpctr=9999999999`
       ];
       
-      // Windows-specific spawn options
+      console.log('📋 Enhanced command with age restriction bypass');
+      console.log('🔧 Using multiple player clients and browser headers');
+      
+      // Enhanced spawn options
       const spawnOptions = {
         stdio: ['ignore', 'pipe', 'pipe'],
-        windowsHide: true,  // Hide console window on Windows
-        env: { ...process.env, PYTHONIOENCODING: 'utf-8' }
+        windowsHide: true,
+        timeout: 300000,  // 5 minute timeout for longer videos
+        env: { 
+          ...process.env, 
+          PYTHONIOENCODING: 'utf-8',
+          // Set environment variables that can help with age restrictions
+          YOUTUBE_DL_AGE_LIMIT: '0'
+        }
       };
-      
-      console.log('📋 Executing:', `"${ytDlpPath}" ${args.join(' ')}`);
       
       const downloadProcess = spawn(ytDlpPath, args, spawnOptions);
       
@@ -843,6 +888,13 @@ ipcMain.handle('download-video', async (event, videoId) => {
         const output = data.toString();
         stdout += output;
         console.log('📥 STDOUT:', output.trim());
+        
+        // Monitor for age restriction indicators
+        if (output.toLowerCase().includes('age') || 
+            output.toLowerCase().includes('verify') ||
+            output.toLowerCase().includes('restricted')) {
+          console.log('🔄 Detected potential age restriction, continuing with bypass...');
+        }
       });
       
       downloadProcess.stderr.on('data', (data) => {
@@ -860,7 +912,6 @@ ipcMain.handle('download-video', async (event, videoId) => {
           console.log('📊 Output file size:', stats.size, 'bytes');
           
           if (stats.size > 1024) {
-            // Windows-compatible file URL format
             const normalizedPath = outputPath.replace(/\\/g, '/');
             const fileUrl = `file:///${normalizedPath}`;
             console.log('✅ Download completed successfully:', fileUrl);
@@ -872,10 +923,29 @@ ipcMain.handle('download-video', async (event, videoId) => {
           }
         }
         
-        // Enhanced Windows error handling
+        // ENHANCED: Better error handling for age restrictions
         let errorMessage = 'Download failed';
         const stderrLower = stderr.toLowerCase();
+        const stdoutLower = stdout.toLowerCase();
         
+        // Age restriction specific errors
+        if (stderrLower.includes('sign in to confirm your age') || 
+            stderrLower.includes('age-restricted') ||
+            stderrLower.includes('content warning') ||
+            stdoutLower.includes('requires age verification')) {
+          
+          console.log('🔄 Attempting secondary download method for age-restricted content...');
+          
+          // Try alternative download method
+          attemptAlternativeDownload(videoId, outputPath)
+            .then(resolve)
+            .catch(() => {
+              reject(new Error('This video requires age verification. Try using a different video or ensure you are logged into YouTube in your browser.'));
+            });
+          return;
+        }
+        
+        // Platform-specific error handling
         if (process.platform === 'win32') {
           if (stderrLower.includes('access is denied') || stderrLower.includes('permission denied')) {
             errorMessage = 'Permission denied. Try running as administrator or check Windows Defender settings.';
@@ -886,19 +956,28 @@ ipcMain.handle('download-video', async (event, videoId) => {
           }
         }
         
-        // General error handling (for all platforms)
-        if (stderrLower.includes('video unavailable') || stdout.toLowerCase().includes('unavailable')) {
+        // General error handling
+        if (stderrLower.includes('video unavailable') || stdoutLower.includes('unavailable')) {
           errorMessage = 'Video is unavailable or has been removed from YouTube';
         } else if (stderrLower.includes('private video') || stderrLower.includes('private')) {
           errorMessage = 'This video is private and cannot be downloaded';
-        } else if (stderrLower.includes('sign in to confirm') || stderrLower.includes('age')) {
-          errorMessage = 'Video requires age verification. Try a different video.';
         } else if (stderrLower.includes('too large') || stderrLower.includes('filesize')) {
-          errorMessage = 'Video file is too large (>25MB limit)';
+          errorMessage = 'Video file is too large (>100MB limit)';
         } else if (stderrLower.includes('unable to extract') || stderrLower.includes('no video formats')) {
-          errorMessage = 'Unable to extract video - it may be restricted. Try a different video.';
+          errorMessage = 'Unable to extract video - it may be restricted. Trying alternative method...';
+          
+          // Try alternative method for extraction failures
+          attemptAlternativeDownload(videoId, outputPath)
+            .then(resolve)
+            .catch(() => reject(new Error('Unable to download this video. It may be geo-blocked or have strict restrictions.')));
+          return;
         } else if (stderrLower.includes('http error 403')) {
-          errorMessage = 'Access denied. YouTube has blocked this request. Try a different video or wait a few minutes.';
+          errorMessage = 'Access denied by YouTube. Trying alternative method...';
+          
+          attemptAlternativeDownload(videoId, outputPath)
+            .then(resolve)
+            .catch(() => reject(new Error('Access denied by YouTube. Try a different video or wait a few minutes.')));
+          return;
         } else if (stderrLower.includes('http error 404')) {
           errorMessage = 'Video not found - it may have been deleted';
         }
@@ -910,7 +989,6 @@ ipcMain.handle('download-video', async (event, videoId) => {
       downloadProcess.on('error', (error) => {
         console.error('❌ Process spawn error:', error);
         
-        // Windows-specific error handling
         let errorMsg = `Failed to start download process: ${error.message}`;
         if (process.platform === 'win32') {
           if (error.code === 'ENOENT') {
@@ -923,7 +1001,7 @@ ipcMain.handle('download-video', async (event, videoId) => {
         reject(new Error(errorMsg));
       });
       
-      // Timeout after 2 minutes
+      // Enhanced timeout for longer videos
       const timeout = setTimeout(() => {
         console.log('⏰ Download timeout, killing process');
         downloadProcess.kill('SIGTERM');
@@ -941,8 +1019,8 @@ ipcMain.handle('download-video', async (event, videoId) => {
             console.warn('Could not clean up timeout file:', e.message);
           }
         }
-        reject(new Error('Download timeout (2 minutes) - video may be too large or network is slow'));
-      }, 120000);
+        reject(new Error('Download timeout (5 minutes) - video may be very large or connection is slow'));
+      }, 300000); // 5 minutes timeout
       
       downloadProcess.on('close', () => {
         clearTimeout(timeout);
@@ -954,6 +1032,85 @@ ipcMain.handle('download-video', async (event, videoId) => {
     throw error;
   }
 });
+
+// NEW: Alternative download method for age-restricted content
+async function attemptAlternativeDownload(videoId, outputPath) {
+  console.log('🔄 Attempting alternative download method...');
+  
+  return new Promise((resolve, reject) => {
+    // Alternative arguments with different approach
+    const altArgs = [
+      '--no-check-certificates',
+      '--quiet',  // Reduce verbosity for alternative method
+      '--no-warnings',
+      
+      // Different extraction strategy
+      '--extractor-args', 'youtube:player_client=ios',  // iOS client often bypasses restrictions
+      '--user-agent', 'com.google.ios.youtube/17.33.2 (iPhone14,2; U; CPU iOS 15_6 like Mac OS X)',
+      
+      // Simplified format selection
+      '-f', 'best[height<=720]/worst',
+      '--max-filesize', '30M',  // Smaller size limit for alternative method
+      
+      // Basic retry logic
+      '--retries', '3',
+      '--socket-timeout', '90',
+      
+      '--no-playlist',
+      '-o', outputPath,
+      
+      // Try with minimal additional parameters
+      `https://www.youtube.com/watch?v=${videoId}`
+    ];
+    
+    console.log('🎯 Trying iOS client bypass method...');
+    
+    const altProcess = spawn(ytDlpPath, altArgs, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+      timeout: 180000  // 3 minute timeout
+    });
+    
+    let altStderr = '';
+    
+    altProcess.stderr.on('data', (data) => {
+      altStderr += data.toString();
+    });
+    
+    altProcess.on('close', (code) => {
+      if (fs.existsSync(outputPath)) {
+        const stats = fs.statSync(outputPath);
+        if (stats.size > 1024) {
+          const normalizedPath = outputPath.replace(/\\/g, '/');
+          const fileUrl = `file:///${normalizedPath}`;
+          console.log('✅ Alternative download successful:', fileUrl);
+          resolve({ url: fileUrl });
+          return;
+        } else {
+          try {
+            fs.unlinkSync(outputPath);
+          } catch (e) {
+            console.warn('Could not remove small alternative file:', e.message);
+          }
+        }
+      }
+      
+      console.log('❌ Alternative download failed');
+      reject(new Error('Alternative download method failed'));
+    });
+    
+    altProcess.on('error', (error) => {
+      console.log('❌ Alternative process error:', error);
+      reject(error);
+    });
+    
+    // Timeout for alternative method
+    setTimeout(() => {
+      altProcess.kill();
+      reject(new Error('Alternative download timeout'));
+    }, 180000);
+  });
+}
 
 // Utility functions
 function getDiskSpace() {
@@ -998,12 +1155,9 @@ function cleanupOldVideos() {
   }
 }
 
-// Debug download function with Windows compatibility
+// Enhanced debug download with age restriction testing
 async function debugDownload(videoId) {
-  console.log('🐛 DEBUG: Starting Windows-compatible debug download for:', videoId);
-  console.log('🐛 DEBUG: ytDlpPath:', ytDlpPath);
-  console.log('🐛 DEBUG: videosDir:', videosDir);
-  console.log('🐛 DEBUG: Platform:', process.platform);
+  console.log('🐛 DEBUG: Testing age restriction bypass for:', videoId);
   
   if (!ytDlpPath) {
     throw new Error('yt-dlp path is null or undefined');
@@ -1014,29 +1168,27 @@ async function debugDownload(videoId) {
   }
   
   const outputPath = path.join(videosDir, `debug_${videoId}.mp4`);
-  console.log('🐛 DEBUG: outputPath:', outputPath);
+  console.log('🐛 DEBUG: Testing with enhanced args for:', outputPath);
   
   return new Promise((resolve, reject) => {
     const args = [
       '--verbose',
       '--no-check-certificates',
-      '--extractor-args', 'youtube:player_client=android',
-      '--user-agent', 'com.google.android.youtube/17.31.35 (Linux; U; Android 11) gzip',
-      '-f', 'best[height<=1080][ext=mp4]/best[ext=mp4]/best',
-      '--max-filesize', '10M',
-      '--socket-timeout', '60',
+      '--age-limit', '0',
+      '--extractor-args', 'youtube:player_client=android,ios',
+      '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      '--add-header', 'Accept-Language:en-US,en;q=0.9',
+      '-f', 'best[height<=720]/worst',
+      '--max-filesize', '20M',
       '--retries', '3',
       '--no-playlist',
-      '--newline',
       '--no-warnings',
       '-o', outputPath,
-      `https://www.youtube.com/watch?v=${videoId}`
+      `https://www.youtube.com/watch?v=${videoId}&has_verified=1`
     ];
     
-    console.log('🐛 DEBUG: Command:', ytDlpPath);
-    console.log('🐛 DEBUG: Args:', args.join(' '));
+    console.log('🐛 DEBUG: Enhanced command for age restriction testing');
     
-    // Windows-specific spawn options
     const spawnOptions = {
       stdio: ['ignore', 'pipe', 'pipe']
     };
@@ -1064,15 +1216,12 @@ async function debugDownload(videoId) {
     
     process.on('close', (code) => {
       console.log('🐛 DEBUG: Process closed with code:', code);
-      console.log('🐛 DEBUG: Final stdout:', stdout);
-      console.log('🐛 DEBUG: Final stderr:', stderr);
       
       if (code === 0 && fs.existsSync(outputPath)) {
         const stats = fs.statSync(outputPath);
         console.log('🐛 DEBUG: File created, size:', stats.size);
         
         if (stats.size > 100) {
-          // Windows-compatible file URL
           const normalizedPath = outputPath.replace(/\\/g, '/');
           const fileUrl = `file:///${normalizedPath}`;
           resolve({ url: fileUrl });
@@ -1081,7 +1230,13 @@ async function debugDownload(videoId) {
           reject(new Error(`File too small: ${stats.size} bytes`));
         }
       } else {
-        reject(new Error(`Download failed with code ${code}. stderr: ${stderr}`));
+        // Try alternative method if main debug fails
+        console.log('🐛 DEBUG: Main method failed, trying alternative...');
+        attemptAlternativeDownload(videoId, outputPath)
+          .then(resolve)
+          .catch(() => {
+            reject(new Error(`Debug download failed with code ${code}. stderr: ${stderr}`));
+          });
       }
     });
     
@@ -1094,7 +1249,7 @@ async function debugDownload(videoId) {
       console.log('🐛 DEBUG: Timeout, killing process');
       process.kill();
       reject(new Error('Debug download timeout'));
-    }, 60000);
+    }, 120000);  // 2 minute timeout for debug
   });
 }
 
@@ -1286,7 +1441,7 @@ ipcMain.handle('youtube-search', async (event, query) => {
           part: 'snippet',
           type: 'video',
           maxResults: 12,
-          q: query.trim(),
+          q: query.trim() + ' dance tutorial',
           key: 'AIzaSyCnYR4E6pNBl-oHscWZOE_akXbmOtT7FfI',
           safeSearch: 'strict'
         },

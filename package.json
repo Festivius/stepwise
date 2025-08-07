@@ -117,10 +117,10 @@
       "requestedExecutionLevel": "asInvoker",
       "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
       "publisherName": "Stepwise Studio",
-      "verifyUpdateCodeSignature": false,
-      "extraMetadata": {
-        "main": "main.js"
-      }
+      "verifyUpdateCodeSignature": false
+    },
+    "extraMetadata": {
+      "main": "main.js"
     },
     "nsis": {
       "oneClick": false,
