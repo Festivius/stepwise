@@ -16,6 +16,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   youtubeSearch: (query) => ipcRenderer.invoke('youtube-search', query),
   downloadVideo: (videoId) => ipcRenderer.invoke('download-video', videoId),
   
+  // yt-dlp management
+  reinitializeYtDlp: () => ipcRenderer.invoke('reinitialize-ytdlp'),
+  
   // File operations
   cleanupVideos: () => ipcRenderer.invoke('cleanup-videos'),
   getVideoList: () => ipcRenderer.invoke('get-video-list'),

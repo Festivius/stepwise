@@ -17,33 +17,105 @@ if (!fs.existsSync(videosDir)) {
 // Initialize yt-dlp-wrap
 async function initializeYtDlp() {
   try {
+    console.log('🔧 Initializing yt-dlp...');
+    console.log('📦 App is packaged:', app.isPackaged);
+    console.log('💻 Platform:', process.platform);
+    console.log('🗂️ Process resources path:', process.resourcesPath);
+    
+    let binaryPath = null;
+    
     if (app.isPackaged) {
-      // In packaged app, use bundled binary
-      const binaryPath = path.join(process.resourcesPath, 'bin', 
-        process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp'
-      );
+      // Try different possible locations for bundled binary
+      const possiblePaths = [
+        path.join(process.resourcesPath, 'bin', process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp'),
+        path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'yt-dlp-wrap', 'bin', process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp'),
+        path.join(__dirname, '..', 'bin', process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp'),
+        path.join(app.getAppPath(), 'bin', process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp')
+      ];
       
-      if (fs.existsSync(binaryPath)) {
+      console.log('🔍 Searching for yt-dlp binary in paths:', possiblePaths);
+      
+      for (const testPath of possiblePaths) {
+        console.log('🔍 Checking:', testPath);
+        if (fs.existsSync(testPath)) {
+          binaryPath = testPath;
+          console.log('✅ Found yt-dlp binary at:', binaryPath);
+          break;
+        }
+      }
+      
+      if (binaryPath) {
+        // Make sure binary is executable on Unix systems
+        if (process.platform !== 'win32') {
+          try {
+            const { execSync } = require('child_process');
+            execSync(`chmod +x "${binaryPath}"`);
+            console.log('✅ Made binary executable');
+          } catch (chmodError) {
+            console.warn('⚠️ Could not make binary executable:', chmodError.message);
+          }
+        }
+        
         ytDlpWrap = new YTDlpWrap(binaryPath);
         console.log('✅ Using bundled yt-dlp binary');
       } else {
-        // Fallback to auto-download
-        ytDlpWrap = new YTDlpWrap();
-        console.log('⬇️ yt-dlp will auto-download on first use');
+        console.log('⚠️ No bundled binary found, falling back to auto-download');
+        // Create yt-dlp in app data directory
+        const ytDlpDir = path.join(app.getPath('userData'), 'yt-dlp');
+        if (!fs.existsSync(ytDlpDir)) {
+          fs.mkdirSync(ytDlpDir, { recursive: true });
+        }
+        
+        ytDlpWrap = new YTDlpWrap(undefined, ytDlpDir);
+        console.log('⬇️ yt-dlp will auto-download to:', ytDlpDir);
       }
     } else {
-      // In development, let it auto-download
-      ytDlpWrap = new YTDlpWrap();
-      console.log('🔧 Development mode - yt-dlp will auto-download if needed');
+      // In development, let it auto-download to project directory
+      const ytDlpDir = path.join(__dirname, 'yt-dlp-bin');
+      if (!fs.existsSync(ytDlpDir)) {
+        fs.mkdirSync(ytDlpDir, { recursive: true });
+      }
+      
+      ytDlpWrap = new YTDlpWrap(undefined, ytDlpDir);
+      console.log('🔧 Development mode - yt-dlp will auto-download to:', ytDlpDir);
     }
     
-    // Test the binary
-    const version = await ytDlpWrap.getVersion();
-    console.log('✅ yt-dlp version:', version);
+    // Test the binary with retry logic
+    let retries = 3;
+    let version = null;
+    
+    while (retries > 0 && !version) {
+      try {
+        console.log(`🧪 Testing yt-dlp binary (attempt ${4 - retries}/3)...`);
+        version = await ytDlpWrap.getVersion();
+        console.log('✅ yt-dlp version:', version);
+        break;
+      } catch (testError) {
+        console.warn(`⚠️ yt-dlp test failed (attempt ${4 - retries}/3):`, testError.message);
+        retries--;
+        
+        if (retries > 0) {
+          console.log('⏱️ Waiting 2 seconds before retry...');
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+      }
+    }
+    
+    if (!version) {
+      throw new Error('Failed to initialize yt-dlp after 3 attempts');
+    }
     
   } catch (error) {
     console.error('❌ Failed to initialize yt-dlp:', error.message);
+    console.error('❌ Full error:', error);
     ytDlpWrap = null;
+    
+    // Show user-friendly error
+    if (app.isReady()) {
+      dialog.showErrorBox('yt-dlp Initialization Error', 
+        `Failed to initialize video downloader:\n${error.message}\n\nTry restarting the application or check your internet connection.`
+      );
+    }
   }
 }
 
@@ -183,8 +255,22 @@ ipcMain.handle('get-health', () => {
     videosDir: fs.existsSync(videosDir),
     diskSpace: getDiskSpace(),
     isElectron: true,
-    ytDlpReady: !!ytDlpWrap
+    ytDlpReady: !!ytDlpWrap,
+    isPackaged: app.isPackaged,
+    platform: process.platform
   };
+});
+
+// Add handler to reinitialize yt-dlp if needed
+ipcMain.handle('reinitialize-ytdlp', async () => {
+  try {
+    console.log('🔄 Manual yt-dlp reinitialization requested');
+    await initializeYtDlp();
+    return { success: !!ytDlpWrap, ready: !!ytDlpWrap };
+  } catch (error) {
+    console.error('❌ Manual yt-dlp reinitialization failed:', error);
+    return { success: false, error: error.message };
+  }
 });
 
 ipcMain.handle('youtube-search', async (event, query) => {
@@ -238,8 +324,14 @@ ipcMain.handle('download-video', async (event, videoId) => {
       throw new Error('Video ID is required');
     }
 
+    // Check if yt-dlp is initialized, try to reinitialize if not
     if (!ytDlpWrap) {
-      throw new Error('yt-dlp not initialized');
+      console.log('🔄 yt-dlp not initialized, attempting to reinitialize...');
+      await initializeYtDlp();
+      
+      if (!ytDlpWrap) {
+        throw new Error('yt-dlp initialization failed. Please restart the application.');
+      }
     }
 
     const outputPath = path.join(videosDir, `${videoId}.mp4`);

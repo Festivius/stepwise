@@ -85,6 +85,9 @@
         ]
       }
     ],
+    "asarUnpack": [
+      "node_modules/yt-dlp-wrap/bin/**/*"
+    ],
     "win": {
       "target": [
         {
