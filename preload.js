@@ -14,7 +14,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
   restartApp: () => ipcRenderer.send('restart-app'),
   
   // Remove listeners
-  removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel)
+  removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel),
+
+  youtubeSearch: (query) => {
+    console.log('🔍 Preload: YouTube search request for:', query);
+    return ipcRenderer.invoke('youtube-search', query);
+  },
+  
+  // Video download
+  downloadVideo: (videoId) => {
+    console.log('⬇️ Preload: Download request for video:', videoId);
+    return ipcRenderer.invoke('download-video', videoId);
+  },
+  
+  // Platform info
+  platform: process.platform,
+  
+  // Check if we're in Electron
+  isElectron: true
 });
 
 // Expose a flag to check if we're in Electron

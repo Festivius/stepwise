@@ -1,88 +1,105 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
-const serverApp = require('./src/server');
-const dotenv = require('dotenv');
-
-// Load environment variables
-dotenv.config();
-
-// Set up videos directory in user data
-const userDataPath = app.getPath('userData');
-const VIDEOS_DIR = path.join(userDataPath, 'videos');
-process.env.VIDEOS_DIR = VIDEOS_DIR;
+const fs = require('fs');
+const axios = require('axios');
 
 let mainWindow;
-let expressServer;
+
+// Set up videos directory in userData
+const videosDir = path.join(app.getPath('userData'), 'videos');
+if (!fs.existsSync(videosDir)) {
+  fs.mkdirSync(videosDir, { recursive: true });
+  console.log('📁 Created videos directory:', videosDir);
+}
+
+// Set environment variable for server
+process.env.VIDEOS_DIR = videosDir;
+
+// Start the Express server - FIXED PATH
+const server = require('./src/server.js');
+const PORT = 3001;
+
+let serverInstance;
+
+function startServer() {
+  return new Promise((resolve, reject) => {
+    try {
+      serverInstance = server.listen(PORT, '127.0.0.1', () => {
+        console.log(`🚀 Electron server running on port ${PORT}`);
+        resolve();
+      });
+      
+      serverInstance.on('error', (err) => {
+        console.error('❌ Server error:', err);
+        reject(err);
+      });
+    } catch (err) {
+      console.error('❌ Failed to start server:', err);
+      reject(err);
+    }
+  });
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
-    minWidth: 800,
-    minHeight: 600,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      enableRemoteModule: false,
       nodeIntegration: false,
-      sandbox: false // Set to false to allow file access
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js') // FIXED: preload.js is in root, not src
     },
-    icon: path.join(__dirname, 'assets', 'stepwise-icon.png'),
-    title: 'Stepwise Studio',
-    autoHideMenuBar: true,
-    show: false // Don't show until ready
+    icon: path.join(__dirname, 'assets', 'stepwise-icon.png'), // FIXED: Use correct icon name
+    show: false
   });
 
-  // Load the HTML file from src directory
-  mainWindow.loadFile(path.join(__dirname, 'src', 'index.html'));
+  // Load the HTML file - FIXED PATH
+  mainWindow.loadFile('src/index.html');
 
   // Show window when ready
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
-  });
-
-  // Start Express server after window is created
-  expressServer = serverApp.listen(3001, '127.0.0.1', () => {
-    console.log('Express server running on port 3001 in Electron');
+    console.log('✅ Electron window ready');
   });
 
   // Handle window closed
   mainWindow.on('closed', () => {
     mainWindow = null;
+    if (serverInstance) {
+      serverInstance.close();
+    }
   });
 
-  // Development: Open DevTools
+  // Open DevTools in development
   if (process.env.NODE_ENV === 'development') {
     mainWindow.webContents.openDevTools();
   }
 }
 
-// Ensure single instance
-const gotTheLock = app.requestSingleInstanceLock();
-
-if (!gotTheLock) {
-  app.quit();
-} else {
-  app.on('second-instance', () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
-    }
-  });
-}
-
 // App event handlers
-app.whenReady().then(() => {
-  const createMenu = require('./menu');
-  createMenu();
-  createWindow();
+app.whenReady().then(async () => {
+  try {
+    console.log('🎬 Starting Stepwise Studio...');
+    
+    // Start the server first
+    await startServer();
+    
+    // Create window
+    createWindow();
+    
+    console.log('✅ Stepwise Studio ready!');
+  } catch (err) {
+    console.error('❌ Failed to start application:', err);
+    dialog.showErrorBox('Startup Error', `Failed to start Stepwise Studio: ${err.message}`);
+    app.quit();
+  }
 });
 
 app.on('window-all-closed', () => {
-  if (expressServer) {
-    expressServer.close();
-  }
   if (process.platform !== 'darwin') {
+    if (serverInstance) {
+      serverInstance.close();
+    }
     app.quit();
   }
 });
@@ -93,98 +110,172 @@ app.on('activate', () => {
   }
 });
 
-// Clean up when app quits
-app.on('before-quit', () => {
-  if (expressServer) {
-    expressServer.close();
-  }
-});
-
 // IPC Handlers
-ipcMain.handle('youtube-search', async (_, query) => {
-  try {
-    const response = await fetch(`http://127.0.0.1:3001/youtube-search?q=${encodeURIComponent(query)}`);
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'Search failed');
-    return data;
-  } catch (error) {
-    console.error('Search error:', error);
-    throw error;
-  }
-});
-
-ipcMain.handle('download-video', async (_, videoId) => {
-  try {
-    const response = await fetch(`http://127.0.0.1:3001/download?id=${videoId}`);
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'Download failed');
-    return data;
-  } catch (error) {
-    console.error('Download error:', error);
-    throw error;
-  }
-});
-
-ipcMain.handle('show-message-box', async (_, options) => {
-  if (mainWindow) {
-    const result = await dialog.showMessageBox(mainWindow, options);
-    return result;
-  }
-  return null;
-});
-
 ipcMain.handle('get-app-version', () => {
   return app.getVersion();
 });
 
-// Auto-updater setup
-const { autoUpdater } = require('electron-updater');
-
-autoUpdater.autoDownload = true;
-autoUpdater.autoInstallOnAppQuit = true;
-
-autoUpdater.on('checking-for-update', () => {
-  console.log('Checking for update...');
+ipcMain.handle('show-message-box', async (event, options) => {
+  const result = await dialog.showMessageBox(mainWindow, options);
+  return result;
 });
 
-autoUpdater.on('update-available', () => {
-  console.log('Update available.');
-  if (mainWindow) {
-    mainWindow.webContents.send('update-available');
+// FIXED: YouTube Search IPC Handler
+ipcMain.handle('youtube-search', async (event, query) => {
+  try {
+    console.log('🔍 IPC: Searching YouTube for:', query);
+    
+    if (!query || query.trim().length === 0) {
+      throw new Error('Search query is required');
+    }
+
+    const response = await axios.get(
+      'https://www.googleapis.com/youtube/v3/search',
+      {
+        params: {
+          part: 'snippet',
+          type: 'video',
+          maxResults: 12,
+          q: query.trim() + ' dance tutorial',
+          key: 'AIzaSyA-2tVSmZeH84nMPSagvzmR6LU-LK9DlP4',
+          safeSearch: 'strict'
+        },
+        timeout: 15000
+      }
+    );
+
+    console.log('✅ IPC: Found', response.data.items?.length || 0, 'videos');
+    return response.data;
+
+  } catch (error) {
+    console.error('❌ IPC YouTube search error:', error.response?.data || error.message);
+    
+    // Create user-friendly error messages
+    let errorMessage = 'Failed to search YouTube';
+    
+    if (error.response?.status === 403) {
+      errorMessage = 'YouTube API quota exceeded or invalid key';
+    } else if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
+      errorMessage = 'No internet connection';
+    } else if (error.response?.data?.error?.message) {
+      errorMessage = error.response.data.error.message;
+    }
+    
+    throw new Error(errorMessage);
   }
 });
 
-autoUpdater.on('update-not-available', () => {
-  console.log('Update not available.');
-});
+// FIXED: Video Download IPC Handler
+ipcMain.handle('download-video', async (event, videoId) => {
+  try {
+    console.log('⬇️ IPC: Starting download for video:', videoId);
+    
+    if (!videoId || videoId.trim().length === 0) {
+      throw new Error('Video ID is required');
+    }
 
-autoUpdater.on('error', (err) => {
-  console.log('Error in auto-updater:', err);
-});
+    const outputPath = path.join(videosDir, `${videoId}.mp4`);
+    
+    // Check if video already exists
+    if (fs.existsSync(outputPath)) {
+      console.log('✅ IPC: Video already cached:', videoId);
+      const absolutePath = path.resolve(outputPath);
+      const fileUrl = `file:///${absolutePath.replace(/\\/g, '/')}`;
+      console.log('🎥 IPC: Returning file URL:', fileUrl);
+      return { url: fileUrl };
+    }
 
-autoUpdater.on('download-progress', (progressObj) => {
-  let log_message = "Download speed: " + progressObj.bytesPerSecond;
-  log_message = log_message + ' - Downloaded ' + progressObj.percent + '%';
-  log_message = log_message + ' (' + progressObj.transferred + "/" + progressObj.total + ')';
-  console.log(log_message);
-});
+    console.log('📥 IPC: Downloading new video to:', outputPath);
 
-autoUpdater.on('update-downloaded', () => {
-  console.log('Update downloaded');
-  if (mainWindow) {
-    mainWindow.webContents.send('update-downloaded');
+    // Use youtube-dl-exec for downloading
+    const ytDlp = require('youtube-dl-exec');
+    
+    // Validate youtube-dl-exec installation
+    if (!ytDlp) {
+      throw new Error('youtube-dl-exec not installed. Run: npm install youtube-dl-exec');
+    }
+
+    await ytDlp(`https://www.youtube.com/watch?v=${videoId}`, {
+      format: 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best',
+      mergeOutputFormat: 'mp4',
+      output: outputPath,
+      maxFilesize: '100M',
+      socketTimeout: 30,
+      retries: 3,
+      noWarnings: true
+    });
+
+    // Verify file was created and has content
+    if (!fs.existsSync(outputPath)) {
+      throw new Error('Video file was not created - download may have failed');
+    }
+
+    const stats = fs.statSync(outputPath);
+    if (stats.size === 0) {
+      // Clean up empty file
+      fs.unlinkSync(outputPath);
+      throw new Error('Downloaded video file is empty - video may be unavailable');
+    }
+
+    console.log('✅ IPC: Download completed:', videoId, `(${(stats.size / 1024 / 1024).toFixed(2)}MB)`);
+    
+    const absolutePath = path.resolve(outputPath);
+    const fileUrl = `file:///${absolutePath.replace(/\\/g, '/')}`;
+    console.log('🎥 IPC: Returning file URL:', fileUrl);
+    
+    return { url: fileUrl };
+
+  } catch (error) {
+    console.error('❌ IPC Download error for', videoId, ':', error.message);
+    
+    // Clean up any partial downloads
+    const outputPath = path.join(videosDir, `${videoId}.mp4`);
+    if (fs.existsSync(outputPath)) {
+      try {
+        fs.unlinkSync(outputPath);
+        console.log('🗑️ Cleaned up partial download');
+      } catch (cleanupError) {
+        console.warn('⚠️ Could not clean up partial download:', cleanupError.message);
+      }
+    }
+    
+    // Create user-friendly error messages
+    let errorMessage = 'Failed to download video';
+    
+    if (error.message.includes('youtube-dl')) {
+      errorMessage = 'Video downloader not available. Please restart the app.';
+    } else if (error.message.includes('HTTP 403') || error.message.includes('Sign in to confirm')) {
+      errorMessage = 'Video is age-restricted or private';
+    } else if (error.message.includes('HTTP 404') || error.message.includes('not available')) {
+      errorMessage = 'Video not found or unavailable';
+    } else if (error.message.includes('format')) {
+      errorMessage = 'No suitable video format available';
+    } else if (error.code === 'ENOTFOUND') {
+      errorMessage = 'No internet connection';
+    } else if (error.message.includes('timeout')) {
+      errorMessage = 'Download timeout - try again';
+    }
+    
+    throw new Error(errorMessage);
   }
 });
 
-ipcMain.on('restart-app', () => {
-  autoUpdater.quitAndInstall();
+// Handle app errors
+process.on('uncaughtException', (error) => {
+  console.error('❌ Uncaught Exception:', error);
+  dialog.showErrorBox('Application Error', error.message);
 });
 
-// Check for updates after app is ready
-app.on('ready', () => {
-  if (process.env.NODE_ENV !== 'development') {
-    setTimeout(() => {
-      autoUpdater.checkForUpdatesAndNotify();
-    }, 5000); // Wait 5 seconds before checking
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+// Cleanup on exit
+app.on('before-quit', () => {
+  if (serverInstance) {
+    serverInstance.close();
   }
 });
+
+console.log('📁 Videos will be stored in:', videosDir);
+console.log('🎬 Stepwise Studio main process loaded');

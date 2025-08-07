@@ -1197,9 +1197,8 @@
   <div class="save-notification" id="saveNotification">Video saved!</div>
 
   <script>
-    // Check if we're running in Electron
     // Check if we're running in Electron - FIXED
-    const isElectron = !!(window.electronAPI && window.electronAPI.getAppVersion);
+    const isElectronApp = !!(window.electronAPI && window.electronAPI.getAppVersion);
 
     if (window.electronAPI) {
       // Set app version in footer
@@ -1211,7 +1210,7 @@
       });
     }
 
-    const backendURL = isElectron ? 'http://127.0.0.1:3001' : 'http://localhost:3000';
+    const backendURL = isElectronApp ? 'http://127.0.0.1:3001' : 'http://localhost:3000';
     
     // Cookie utility functions
     function setCookie(name, value, days = 30) {
@@ -1549,7 +1548,7 @@
       
       try {
         let data;
-        if (isElectron) {
+        if (isElectronApp) {
           // Use Electron IPC for search
           data = await window.electronAPI.youtubeSearch(query);
         } else {
@@ -1615,7 +1614,7 @@
         
       } catch (err) {
         console.error('Search error:', err);
-        if (isElectron && window.electronAPI.showMessageBox) {
+        if (isElectronApp && window.electronAPI.showMessageBox) {
           window.electronAPI.showMessageBox({
             type: 'error',
             title: 'Search Error',
@@ -1664,7 +1663,7 @@
       
       try {
         let data;
-        if (isElectron) {
+        if (isElectronApp) {
           // Use Electron IPC for download
           data = await window.electronAPI.downloadVideo(videoId);
         } else {
@@ -1706,7 +1705,7 @@
         };
       } catch (err) {
         console.error('Download/playback error:', err);
-        if (isElectron && window.electronAPI.showMessageBox) {
+        if (isElectronApp && window.electronAPI.showMessageBox) {
           window.electronAPI.showMessageBox({
             type: 'error',
             title: 'Playback Error',
@@ -1862,7 +1861,7 @@
       loopEndTime = Math.min(video.duration || 10, loopEndTime);
       
       if (loopStartTime >= loopEndTime) {
-        if (isElectron) {
+        if (isElectronApp) {
           window.electronAPI.showMessageBox({
             type: 'warning',
             title: 'Invalid Loop',
@@ -2130,7 +2129,7 @@
     });
     
     // Add close button for Electron app
-    if (isElectron) {
+    if (isElectronApp) {
       document.addEventListener('DOMContentLoaded', () => {
         const header = document.querySelector('.header');
         if (header) {

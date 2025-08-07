@@ -5,7 +5,6 @@ const { exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const axios = require('axios');
-const { youtube } = require('./config');
 
 const app = express();
 
@@ -77,7 +76,7 @@ app.get('/youtube-search', async (req, res) => {
           type: 'video',
           maxResults: 12,
           q: query + ' dance tutorial',
-          key: youtube.apiKey,
+          key: 'AIzaSyA-2tVSmZeH84nMPSagvzmR6LU-LK9DlP4',
           safeSearch: 'strict'
         },
         timeout: 15000
