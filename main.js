@@ -47,13 +47,13 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js') // FIXED: preload.js is in root, not src
+      preload: path.join(__dirname, 'preload.js')
     },
-    icon: path.join(__dirname, 'assets', 'stepwise-icon.png'), // FIXED: Use correct icon name
+    icon: path.join(__dirname, 'assets', 'stepwise-icon.png'),
     show: false
   });
 
-  // Load the HTML file - FIXED PATH
+  // Load the HTML file
   mainWindow.loadFile('src/index.html');
 
   // Show window when ready
@@ -120,29 +120,20 @@ ipcMain.handle('show-message-box', async (event, options) => {
   return result;
 });
 
-// FIXED: YouTube Search IPC Handler
+// FIXED: Use server endpoint instead of direct API calls
 ipcMain.handle('youtube-search', async (event, query) => {
   try {
-    console.log('🔍 IPC: Searching YouTube for:', query);
+    console.log('🔍 IPC: Searching YouTube via server for:', query);
     
     if (!query || query.trim().length === 0) {
       throw new Error('Search query is required');
     }
 
-    const response = await axios.get(
-      'https://www.googleapis.com/youtube/v3/search',
-      {
-        params: {
-          part: 'snippet',
-          type: 'video',
-          maxResults: 12,
-          q: query.trim() + ' dance tutorial',
-          key: 'AIzaSyA-2tVSmZeH84nMPSagvzmR6LU-LK9DlP4',
-          safeSearch: 'strict'
-        },
-        timeout: 15000
-      }
-    );
+    // Use the local server instead of direct API calls
+    const response = await axios.get(`http://127.0.0.1:${PORT}/youtube-search`, {
+      params: { q: query.trim() },
+      timeout: 15000
+    });
 
     console.log('✅ IPC: Found', response.data.items?.length || 0, 'videos');
     return response.data;
@@ -150,25 +141,24 @@ ipcMain.handle('youtube-search', async (event, query) => {
   } catch (error) {
     console.error('❌ IPC YouTube search error:', error.response?.data || error.message);
     
-    // Create user-friendly error messages
     let errorMessage = 'Failed to search YouTube';
     
     if (error.response?.status === 403) {
       errorMessage = 'YouTube API quota exceeded or invalid key';
     } else if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
-      errorMessage = 'No internet connection';
-    } else if (error.response?.data?.error?.message) {
-      errorMessage = error.response.data.error.message;
+      errorMessage = 'Server connection failed';
+    } else if (error.response?.data?.error) {
+      errorMessage = error.response.data.error;
     }
     
     throw new Error(errorMessage);
   }
 });
 
-// FIXED: Video Download IPC Handler
+// FIXED: Use server endpoint for downloads
 ipcMain.handle('download-video', async (event, videoId) => {
   try {
-    console.log('⬇️ IPC: Starting download for video:', videoId);
+    console.log('⬇️ IPC: Starting download via server for video:', videoId);
     
     if (!videoId || videoId.trim().length === 0) {
       throw new Error('Video ID is required');
@@ -179,51 +169,43 @@ ipcMain.handle('download-video', async (event, videoId) => {
     // Check if video already exists
     if (fs.existsSync(outputPath)) {
       console.log('✅ IPC: Video already cached:', videoId);
-      const absolutePath = path.resolve(outputPath);
-      const fileUrl = `file:///${absolutePath.replace(/\\/g, '/')}`;
-      console.log('🎥 IPC: Returning file URL:', fileUrl);
-      return { url: fileUrl };
+      const stats = fs.statSync(outputPath);
+      if (stats.size === 0) {
+        // Remove empty file
+        fs.unlinkSync(outputPath);
+        console.log('🗑️ Removed empty cached file');
+      } else {
+        const fileUrl = `file:///${path.resolve(outputPath).replace(/\\/g, '/')}`;
+        console.log('🎥 IPC: Returning cached file URL:', fileUrl);
+        return { url: fileUrl };
+      }
     }
 
-    console.log('📥 IPC: Downloading new video to:', outputPath);
+    console.log('📥 IPC: Requesting download from server');
 
-    // Use youtube-dl-exec for downloading
-    const ytDlp = require('youtube-dl-exec');
-    
-    // Validate youtube-dl-exec installation
-    if (!ytDlp) {
-      throw new Error('youtube-dl-exec not installed. Run: npm install youtube-dl-exec');
-    }
-
-    await ytDlp(`https://www.youtube.com/watch?v=${videoId}`, {
-      format: 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best',
-      mergeOutputFormat: 'mp4',
-      output: outputPath,
-      maxFilesize: '100M',
-      socketTimeout: 30,
-      retries: 3,
-      noWarnings: true
+    // Use the local server for download
+    const response = await axios.get(`http://127.0.0.1:${PORT}/download`, {
+      params: { id: videoId },
+      timeout: 60000 // 60 second timeout for downloads
     });
 
-    // Verify file was created and has content
-    if (!fs.existsSync(outputPath)) {
-      throw new Error('Video file was not created - download may have failed');
+    if (!response.data.url) {
+      throw new Error('Server did not return a video URL');
     }
 
-    const stats = fs.statSync(outputPath);
-    if (stats.size === 0) {
-      // Clean up empty file
-      fs.unlinkSync(outputPath);
-      throw new Error('Downloaded video file is empty - video may be unavailable');
+    console.log('✅ IPC: Server download completed for:', videoId);
+    
+    // Verify the file exists and has content
+    if (fs.existsSync(outputPath)) {
+      const stats = fs.statSync(outputPath);
+      if (stats.size === 0) {
+        fs.unlinkSync(outputPath);
+        throw new Error('Downloaded file is empty');
+      }
+      console.log(`🎥 IPC: File verified (${(stats.size / 1024 / 1024).toFixed(2)}MB)`);
     }
-
-    console.log('✅ IPC: Download completed:', videoId, `(${(stats.size / 1024 / 1024).toFixed(2)}MB)`);
     
-    const absolutePath = path.resolve(outputPath);
-    const fileUrl = `file:///${absolutePath.replace(/\\/g, '/')}`;
-    console.log('🎥 IPC: Returning file URL:', fileUrl);
-    
-    return { url: fileUrl };
+    return response.data;
 
   } catch (error) {
     console.error('❌ IPC Download error for', videoId, ':', error.message);
@@ -239,17 +221,12 @@ ipcMain.handle('download-video', async (event, videoId) => {
       }
     }
     
-    // Create user-friendly error messages
     let errorMessage = 'Failed to download video';
     
-    if (error.message.includes('youtube-dl')) {
-      errorMessage = 'Video downloader not available. Please restart the app.';
-    } else if (error.message.includes('HTTP 403') || error.message.includes('Sign in to confirm')) {
-      errorMessage = 'Video is age-restricted or private';
-    } else if (error.message.includes('HTTP 404') || error.message.includes('not available')) {
-      errorMessage = 'Video not found or unavailable';
-    } else if (error.message.includes('format')) {
-      errorMessage = 'No suitable video format available';
+    if (error.response?.data?.error) {
+      errorMessage = error.response.data.error;
+    } else if (error.code === 'ECONNREFUSED') {
+      errorMessage = 'Server connection failed';
     } else if (error.code === 'ENOTFOUND') {
       errorMessage = 'No internet connection';
     } else if (error.message.includes('timeout')) {
