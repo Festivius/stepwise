@@ -17,7 +17,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   downloadVideo: (videoId) => ipcRenderer.invoke('download-video', videoId),
   
   // yt-dlp management
+  testYtDlp: () => ipcRenderer.invoke('test-ytdlp'),
   reinitializeYtDlp: () => ipcRenderer.invoke('reinitialize-ytdlp'),
+  debugDownload: (videoId) => ipcRenderer.invoke('debug-download', videoId),
   
   // File operations
   cleanupVideos: () => ipcRenderer.invoke('cleanup-videos'),

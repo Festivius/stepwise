@@ -1,6 +1,6 @@
 {
   "name": "stepwise-studio",
-  "version": "1.1.1",
+  "version": "1.1.4",
   "description": "Dance video player with precision controls - Master your moves with looping, speed control, and mirroring",
   "main": "main.js",
   "scripts": {
@@ -35,8 +35,7 @@
     "dotenv": "^16.3.0",
     "electron-updater": "^6.1.0",
     "electron-window-state": "^5.0.3",
-    "express": "^4.18.2",
-    "yt-dlp-wrap": "^2.3.12"
+    "express": "^4.18.2"
   },
   "devDependencies": {
     "electron": "^28.0.0",
@@ -58,35 +57,22 @@
     "directories": {
       "output": "dist"
     },
-    "publish": {
-      "provider": "github",
-      "owner": "Festivius",
-      "repo": "stepwise",
-      "releaseType": "release"
-    },
     "files": [
       "src/**/*",
       "assets/**/*",
+      "binaries/**/*",
       "main.js",
       "preload.js",
-      "menu.js",
       "package.json",
-      "bin/**/*",
       "!node_modules/.cache/**/*",
       "!dist/**/*",
       "!.env"
     ],
     "extraResources": [
       {
-        "from": "node_modules/yt-dlp-wrap/bin",
-        "to": "bin",
-        "filter": [
-          "**/*"
-        ]
+        "from": "binaries",
+        "to": "binaries"
       }
-    ],
-    "asarUnpack": [
-      "node_modules/yt-dlp-wrap/bin/**/*"
     ],
     "win": {
       "target": [
@@ -124,12 +110,6 @@
       ],
       "category": "AudioVideo",
       "icon": "assets/stepwise-icon.png"
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
     }
   }
 }
