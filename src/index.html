@@ -1857,8 +1857,8 @@
         loopRange.style.left = `${startPercent}%`;
         loopRange.style.width = `${Math.max(0, endPercent - startPercent)}%`;
         
-        loopStartHandle.style.left = `${startPercent}%`;
-        loopEndHandle.style.left = `${endPercent}%`;
+        loopStartHandle.style.left = `${startPercent-100}%`;
+        loopEndHandle.style.left = `${endPercent-100}%`;
         
         loopStartHandle.style.display = 'block';
         loopEndHandle.style.display = 'block';
@@ -2059,6 +2059,327 @@
     window.addEventListener('beforeunload', () => {
       saveUserPreferences();
     });
+
+    // Enhanced state management
+    class AppStateManager {
+      constructor() {
+        this.state = {
+          // Video player state
+          currentVideoId: null,
+          currentVideoTitle: '',
+          currentThumbnail: '',
+          currentTime: 0,
+          isPlaying: false,
+          
+          // Player settings
+          volume: 1,
+          playbackRate: 1,
+          loopMode: false,
+          loopStartTime: 0,
+          loopEndTime: 10,
+          mirrorMode: false,
+          
+          // UI state
+          savedVideos: [],
+          recentVideos: [],
+          lastSearchQuery: '',
+          
+          // Session data
+          sessionStartTime: Date.now(),
+          practiceTime: 0
+        };
+        
+        this.autoSaveInterval = null;
+        this.isInitialized = false;
+      }
+
+      // Initialize and load saved state
+      async initialize() {
+        if (this.isInitialized) return;
+        
+        try {
+          console.log('🔄 Loading saved app state...');
+          
+          // Load all preferences from Electron
+          const savedState = await window.electronAPI.getPreferences();
+          
+          // Merge with current state
+          this.state = { ...this.state, ...savedState };
+          
+          // Apply loaded state to UI
+          this.applyStateToUI();
+          
+          // Set up auto-save
+          this.setupAutoSave();
+          
+          // Listen for app events
+          this.setupEventListeners();
+          
+          this.isInitialized = true;
+          console.log('✅ App state loaded and initialized');
+          
+        } catch (error) {
+          console.warn('⚠️ Could not load saved state:', error);
+        }
+      }
+
+      // Apply loaded state to the UI
+      applyStateToUI() {
+        // Restore video player settings
+        if (video) {
+          video.volume = this.state.volume || 1;
+          video.playbackRate = this.state.playbackRate || 1;
+          
+          if (volumeSlider) volumeSlider.value = this.state.volume || 1;
+          if (speedBtn) speedBtn.textContent = `${this.state.playbackRate || 1}x`;
+          
+          updateVolumeIcon();
+        }
+
+        // Restore loop settings
+        if (this.state.loopMode) {
+          isLoopMode = true;
+          loopStartTime = this.state.loopStartTime || 0;
+          loopEndTime = this.state.loopEndTime || 10;
+          
+          if (loopBtn) loopBtn.classList.add('active');
+          if (loopRange) loopRange.style.display = 'block';
+          if (loopStartHandle) loopStartHandle.style.display = 'block';
+          if (loopEndHandle) loopEndHandle.style.display = 'block';
+          if (loopIndicator) loopIndicator.style.display = 'block';
+          if (loopHighlight) loopHighlight.classList.add('active');
+        }
+
+        // Restore mirror mode
+        if (this.state.mirrorMode) {
+          if (video) video.classList.add('mirror-video');
+          if (mirrorBtn) mirrorBtn.classList.add('active');
+        }
+
+        // Restore search query
+        if (this.state.lastSearchQuery && searchQuery) {
+          searchQuery.value = this.state.lastSearchQuery;
+        }
+
+        // Restore saved videos
+        if (this.state.savedVideos) {
+          savedVideos = this.state.savedVideos;
+          updateSavedVideos();
+        }
+
+        // Restore last video if available
+        if (this.state.currentVideoId && this.state.currentVideoId !== 'null') {
+          this.restoreLastVideo();
+        }
+
+        console.log('🎨 UI state restored');
+      }
+
+      // Restore the last video that was playing
+      async restoreLastVideo() {
+        try {
+          console.log('🎬 Restoring last video:', this.state.currentVideoId);
+          
+          lastVideoId = this.state.currentVideoId;
+          lastVideoTitle = this.state.currentVideoTitle || 'Restored Video';
+          lastThumbnail = this.state.currentThumbnail || '';
+          
+          // Set video title
+          if (videoTitle) {
+            videoTitle.textContent = lastVideoTitle;
+            videoTitle.style.display = 'block';
+          }
+
+          // Try to download and load the video
+          const data = await window.electronAPI.downloadVideo(lastVideoId);
+          if (data.url && video) {
+            video.src = data.url;
+            video.load();
+            
+            // Restore playback position after video loads
+            video.addEventListener('loadedmetadata', () => {
+              if (this.state.currentTime && this.state.currentTime > 0) {
+                video.currentTime = Math.min(this.state.currentTime, video.duration);
+              }
+              
+              // Update loop display if in loop mode
+              if (isLoopMode) {
+                updateLoopRangeDisplay();
+                updateLoopIndicator();
+              }
+            }, { once: true });
+          }
+        } catch (error) {
+          console.warn('⚠️ Could not restore last video:', error.message);
+        }
+      }
+
+      // Get current app state
+      getCurrentState() {
+        const currentState = {
+          // Video state
+          currentVideoId: lastVideoId,
+          currentVideoTitle: lastVideoTitle,
+          currentThumbnail: lastThumbnail,
+          currentTime: video ? video.currentTime : 0,
+          isPlaying: video ? !video.paused : false,
+          
+          // Player settings
+          volume: video ? video.volume : 1,
+          playbackRate: video ? video.playbackRate : 1,
+          loopMode: isLoopMode,
+          loopStartTime: loopStartTime,
+          loopEndTime: loopEndTime,
+          mirrorMode: video ? video.classList.contains('mirror-video') : false,
+          
+          // UI state
+          savedVideos: savedVideos,
+          lastSearchQuery: searchQuery ? searchQuery.value : '',
+          
+          // Session data
+          practiceTime: Date.now() - this.state.sessionStartTime
+        };
+
+        return currentState;
+      }
+
+      // Save current state
+      async saveState() {
+        try {
+          const currentState = this.getCurrentState();
+          await window.electronAPI.updatePreferences(currentState);
+          console.log('💾 App state saved');
+        } catch (error) {
+          console.warn('⚠️ Could not save state:', error);
+        }
+      }
+
+      // Set up auto-save every 30 seconds
+      setupAutoSave() {
+        // Clear existing interval
+        if (this.autoSaveInterval) {
+          clearInterval(this.autoSaveInterval);
+        }
+
+        // Save state every 30 seconds
+        this.autoSaveInterval = setInterval(() => {
+          this.saveState();
+        }, 30000);
+
+        // Save state when page visibility changes (user switches tabs/minimizes)
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'hidden') {
+            this.saveState();
+          }
+        });
+
+        // Save state before page unload
+        window.addEventListener('beforeunload', () => {
+          this.saveState();
+        });
+      }
+
+      // Set up event listeners for Electron IPC
+      setupEventListeners() {
+        // Listen for auto-save requests from main process
+        window.electronAPI.onAutoSave(() => {
+          console.log('🔄 Auto-save requested by main process');
+          this.saveState();
+        });
+
+        // Listen for app closing
+        window.electronAPI.onAppClosing(() => {
+          console.log('👋 App is closing, saving final state...');
+          this.saveState();
+        });
+      }
+
+      // Clean up
+      destroy() {
+        if (this.autoSaveInterval) {
+          clearInterval(this.autoSaveInterval);
+        }
+        
+        // Remove listeners
+        window.electronAPI.removeAllListeners('auto-save-preferences');
+        window.electronAPI.removeAllListeners('app-closing');
+      }
+    }
+
+    // Create global state manager
+    const stateManager = new AppStateManager();
+
+    // Initialize when DOM is loaded
+    document.addEventListener('DOMContentLoaded', () => {
+      // Wait for electronAPI to be available
+      if (window.electronAPI) {
+        stateManager.initialize();
+      } else {
+        // Fallback for non-Electron environments
+        console.warn('ElectronAPI not available, using localStorage fallback');
+        loadUserPreferences(); // Your existing function
+      }
+    });
+
+    // Enhanced save functions that use the state manager
+    function saveUserPreferences() {
+      if (stateManager.isInitialized) {
+        stateManager.saveState();
+      } else {
+        // Fallback to cookies
+        const preferences = {
+          volume: video.volume,
+          playbackRate: video.playbackRate,
+          loopMode: isLoopMode,
+          loopStartTime: loopStartTime,
+          loopEndTime: loopEndTime,
+          mirrorMode: video.classList.contains('mirror-video'),
+          lastSearchQuery: searchQuery.value
+        };
+        setCookie('stepwisePreferences', preferences);
+      }
+    }
+
+    // Track video changes for state saving
+    function trackVideoChange(videoId, title, thumbnail) {
+      lastVideoId = videoId;
+      lastVideoTitle = title;
+      lastThumbnail = thumbnail;
+      
+      // Save immediately when video changes
+      if (stateManager.isInitialized) {
+        stateManager.saveState();
+      }
+    }
+
+    // Modified downloadAndPlay function to track video changes
+    const originalDownloadAndPlay = downloadAndPlay;
+    downloadAndPlay = async function(videoId) {
+      // Track the video change
+      trackVideoChange(videoId, lastVideoTitle, lastThumbnail);
+      
+      // Call original function
+      return originalDownloadAndPlay(videoId);
+    };
+
+    // Save state when video time updates (throttled)
+    let lastTimeSave = 0;
+    video.addEventListener('timeupdate', () => {
+      const now = Date.now();
+      if (now - lastTimeSave > 10000) { // Save every 10 seconds
+        lastTimeSave = now;
+        if (stateManager.isInitialized) {
+          stateManager.saveState();
+        }
+      }
+    });
+
+    // Clean up on page unload
+    window.addEventListener('beforeunload', () => {
+      stateManager.destroy();
+    });
+
+    console.log('💾 Enhanced state management initialized');
   </script>
 </body>
 </html>

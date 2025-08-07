@@ -24,6 +24,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // File operations
   cleanupVideos: () => ipcRenderer.invoke('cleanup-videos'),
   getVideoList: () => ipcRenderer.invoke('get-video-list'),
+
+  // NEW: Enhanced preferences management
+  getPreferences: () => ipcRenderer.invoke('get-preferences'),
+  savePreferences: (preferences) => ipcRenderer.invoke('save-preferences', preferences),
+  getPreference: (key) => ipcRenderer.invoke('get-preference', key),
+  setPreference: (key, value) => ipcRenderer.invoke('set-preference', key, value),
+  updatePreferences: (updates) => ipcRenderer.invoke('update-preferences', updates),
+  
+  // NEW: Session tracking
+  getSessionTime: () => ipcRenderer.invoke('get-session-time'),
+  saveSessionData: (data) => ipcRenderer.invoke('save-session-data', data),
+  
+  // NEW: Listen for app events
+  onAutoSave: (callback) => ipcRenderer.on('auto-save-preferences', callback),
+  onAppClosing: (callback) => ipcRenderer.on('app-closing', callback),
+
+  // Clean up listeners
+  removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel),
   
   // Platform info
   platform: process.platform,

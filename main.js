@@ -96,7 +96,7 @@ function testYtDlp() {
     
     const testProcess = spawn(ytDlpPath, ['--version'], { 
       stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: 15000
+      timeout: 60000
     });
     
     let output = '';
@@ -134,10 +134,10 @@ function testYtDlp() {
     setTimeout(() => {
       if (resolved) return;
       resolved = true;
-      console.warn('⚠️ yt-dlp test timeout after 15 seconds');
+      console.warn('⚠️ yt-dlp test timeout after 60 seconds');
       testProcess.kill('SIGTERM');
-      resolve({ success: false, error: 'Test timeout after 15 seconds' });
-    }, 15000);
+      resolve({ success: false, error: 'Test timeout after 60 seconds' });
+    }, 60000);
   });
 }
 
@@ -145,8 +145,106 @@ console.log('🎬 Stepwise Studio starting...');
 console.log('📁 Videos directory:', videosDir);
 
 // Create menu with debug options
+// Enhanced createMenu function with standard shortcuts
 function createMenu() {
   const template = [
+    // File menu
+    {
+      label: 'File',
+      submenu: [
+        {
+          label: 'New',
+          accelerator: 'CmdOrCtrl+N',
+          click: () => {
+            // Add your new file logic here
+            console.log('New file requested');
+          }
+        },
+        {
+          label: 'Open',
+          accelerator: 'CmdOrCtrl+O',
+          click: () => {
+            // Add your open file logic here
+            console.log('Open file requested');
+          }
+        },
+        {
+          label: 'Save',
+          accelerator: 'CmdOrCtrl+S',
+          click: () => {
+            // Add your save logic here
+            console.log('Save requested');
+          }
+        },
+        { type: 'separator' },
+        {
+          label: 'Close',
+          accelerator: 'CmdOrCtrl+W',
+          click: () => {
+            const focusedWindow = BrowserWindow.getFocusedWindow();
+            if (focusedWindow) {
+              focusedWindow.close();
+            }
+          }
+        },
+        {
+          label: 'Quit',
+          accelerator: process.platform === 'darwin' ? 'Cmd+Q' : 'Ctrl+Q',
+          click: () => {
+            app.quit();
+          }
+        }
+      ]
+    },
+    // Edit menu with standard clipboard operations
+    {
+      label: 'Edit',
+      submenu: [
+        {
+          label: 'Undo',
+          accelerator: 'CmdOrCtrl+Z',
+          role: 'undo'
+        },
+        {
+          label: 'Redo',
+          accelerator: 'CmdOrCtrl+Y',
+          role: 'redo'
+        },
+        { type: 'separator' },
+        {
+          label: 'Cut',
+          accelerator: 'CmdOrCtrl+X',
+          role: 'cut'
+        },
+        {
+          label: 'Copy',
+          accelerator: 'CmdOrCtrl+C',
+          role: 'copy'
+        },
+        {
+          label: 'Paste',
+          accelerator: 'CmdOrCtrl+V',
+          role: 'paste'
+        },
+        {
+          label: 'Select All',
+          accelerator: 'CmdOrCtrl+A',
+          role: 'selectall'
+        },
+        { type: 'separator' },
+        {
+          label: 'Find',
+          accelerator: 'CmdOrCtrl+F',
+          click: () => {
+            // Send message to renderer to show find dialog
+            if (mainWindow) {
+              mainWindow.webContents.send('show-find-dialog');
+            }
+          }
+        }
+      ]
+    },
+    // View menu (keeping your existing items and adding more)
     {
       label: 'View',
       submenu: [
@@ -158,19 +256,61 @@ function createMenu() {
           }
         },
         {
+          label: 'Force Reload',
+          accelerator: 'CmdOrCtrl+Shift+R',
+          click: () => {
+            mainWindow.webContents.reloadIgnoringCache();
+          }
+        },
+        {
           label: 'Toggle Developer Tools',
           accelerator: 'F12',
           click: () => {
             mainWindow.webContents.toggleDevTools();
           }
+        },
+        { type: 'separator' },
+        {
+          label: 'Actual Size',
+          accelerator: 'CmdOrCtrl+0',
+          click: () => {
+            mainWindow.webContents.setZoomLevel(0);
+          }
+        },
+        {
+          label: 'Zoom In',
+          accelerator: 'CmdOrCtrl+Plus',
+          click: () => {
+            const currentZoom = mainWindow.webContents.getZoomLevel();
+            mainWindow.webContents.setZoomLevel(currentZoom + 0.5);
+          }
+        },
+        {
+          label: 'Zoom Out',
+          accelerator: 'CmdOrCtrl+-',
+          click: () => {
+            const currentZoom = mainWindow.webContents.getZoomLevel();
+            mainWindow.webContents.setZoomLevel(currentZoom - 0.5);
+          }
+        },
+        { type: 'separator' },
+        {
+          label: 'Toggle Fullscreen',
+          accelerator: 'F11',
+          click: () => {
+            const isFullScreen = mainWindow.isFullScreen();
+            mainWindow.setFullScreen(!isFullScreen);
+          }
         }
       ]
     },
+    // Tools menu (keeping your existing items)
     {
       label: 'Tools',
       submenu: [
         {
           label: 'Debug Download',
+          accelerator: 'CmdOrCtrl+Shift+D',
           click: async () => {
             const result = await dialog.showMessageBox(mainWindow, {
               type: 'question',
@@ -182,8 +322,7 @@ function createMenu() {
             });
             
             if (result.response === 1) {
-              // Simple prompt simulation - in production you'd want a proper input dialog
-              const testVideoId = 'dQw4w9WgXcQ'; // Rick Roll for testing
+              const testVideoId = 'dQw4w9WgXcQ';
               console.log('🧪 Testing download with video ID:', testVideoId);
               
               try {
@@ -207,6 +346,7 @@ function createMenu() {
         },
         {
           label: 'Test yt-dlp',
+          accelerator: 'CmdOrCtrl+Shift+T',
           click: async () => {
             if (!ytDlpPath) {
               dialog.showMessageBox(mainWindow, {
@@ -228,6 +368,7 @@ function createMenu() {
         },
         {
           label: 'Check Videos Folder',
+          accelerator: 'CmdOrCtrl+Shift+V',
           click: () => {
             const { shell } = require('electron');
             shell.openPath(videosDir);
@@ -235,6 +376,7 @@ function createMenu() {
         },
         {
           label: 'Reinitialize yt-dlp',
+          accelerator: 'CmdOrCtrl+Shift+R',
           click: async () => {
             console.log('🔄 Reinitializing yt-dlp...');
             const success = await initializeYtDlp();
@@ -245,11 +387,111 @@ function createMenu() {
               detail: `Binary path: ${ytDlpPath || 'Not found'}`
             });
           }
+        },
+        { type: 'separator' },
+        {
+          label: 'Cleanup Videos',
+          accelerator: 'CmdOrCtrl+Shift+C',
+          click: () => {
+            cleanupOldVideos();
+            dialog.showMessageBox(mainWindow, {
+              type: 'info',
+              title: 'Cleanup Complete',
+              message: 'Old videos have been cleaned up'
+            });
+          }
         }
       ]
     },
+    // Window menu (standard for desktop apps)
+    {
+      label: 'Window',
+      submenu: [
+        {
+          label: 'Minimize',
+          accelerator: 'CmdOrCtrl+M',
+          click: () => {
+            const focusedWindow = BrowserWindow.getFocusedWindow();
+            if (focusedWindow) {
+              focusedWindow.minimize();
+            }
+          }
+        },
+        {
+          label: 'Close',
+          accelerator: 'CmdOrCtrl+W',
+          click: () => {
+            const focusedWindow = BrowserWindow.getFocusedWindow();
+            if (focusedWindow) {
+              focusedWindow.close();
+            }
+          }
+        }
+      ]
+    },
+    // Help menu (keeping your existing content)
     {
       label: 'Help',
+      submenu: [
+        {
+          label: 'About Stepwise Studio',
+          accelerator: 'F1',
+          click: () => {
+            dialog.showMessageBox(mainWindow, {
+              type: 'info',
+              title: 'About Stepwise Studio',
+              message: `Stepwise Studio v${app.getVersion()}`,
+              detail: 'Precision • Dance • Control'
+            });
+          }
+        },
+        {
+          label: 'Keyboard Shortcuts',
+          accelerator: 'CmdOrCtrl+/',
+          click: () => {
+            // Show keyboard shortcuts help
+            dialog.showMessageBox(mainWindow, {
+              type: 'info',
+              title: 'Keyboard Shortcuts',
+              message: 'Available Keyboard Shortcuts',
+              detail: `File:
+Ctrl/Cmd+N - New
+Ctrl/Cmd+O - Open
+Ctrl/Cmd+S - Save
+Ctrl/Cmd+W - Close
+
+Edit:
+Ctrl/Cmd+Z - Undo
+Ctrl/Cmd+Y - Redo
+Ctrl/Cmd+X - Cut
+Ctrl/Cmd+C - Copy
+Ctrl/Cmd+V - Paste
+Ctrl/Cmd+A - Select All
+Ctrl/Cmd+F - Find
+
+View:
+Ctrl/Cmd+R - Reload
+F12 - Developer Tools
+Ctrl/Cmd+0 - Actual Size
+Ctrl/Cmd+Plus - Zoom In
+Ctrl/Cmd+Minus - Zoom Out
+F11 - Fullscreen
+
+Tools:
+Ctrl/Cmd+Shift+D - Debug Download
+Ctrl/Cmd+Shift+T - Test yt-dlp
+Ctrl/Cmd+Shift+V - Videos Folder`
+            });
+          }
+        }
+      ]
+    }
+  ];
+
+  // macOS specific menu adjustments
+  if (process.platform === 'darwin') {
+    template.unshift({
+      label: 'Stepwise Studio',
       submenu: [
         {
           label: 'About Stepwise Studio',
@@ -261,10 +503,52 @@ function createMenu() {
               detail: 'Precision • Dance • Control'
             });
           }
+        },
+        { type: 'separator' },
+        {
+          label: 'Hide Stepwise Studio',
+          accelerator: 'Command+H',
+          role: 'hide'
+        },
+        {
+          label: 'Hide Others',
+          accelerator: 'Command+Shift+H',
+          role: 'hideothers'
+        },
+        {
+          label: 'Show All',
+          role: 'unhide'
+        },
+        { type: 'separator' },
+        {
+          label: 'Quit',
+          accelerator: 'Command+Q',
+          click: () => {
+            app.quit();
+          }
         }
       ]
-    }
-  ];
+    });
+
+    // Adjust Window menu for macOS
+    template[5].submenu = [
+      {
+        label: 'Minimize',
+        accelerator: 'CmdOrCtrl+M',
+        role: 'minimize'
+      },
+      {
+        label: 'Close',
+        accelerator: 'CmdOrCtrl+W',
+        role: 'close'
+      },
+      { type: 'separator' },
+      {
+        label: 'Bring All to Front',
+        role: 'front'
+      }
+    ];
+  }
   
   const menu = Menu.buildFromTemplate(template);
   Menu.setApplicationMenu(menu);
@@ -366,9 +650,9 @@ async function debugDownload(videoId) {
       '--no-check-certificates',
       '--extractor-args', 'youtube:player_client=android',  // Use Android client
       '--user-agent', 'com.google.android.youtube/17.31.35 (Linux; U; Android 11) gzip',
-      '-f', 'best[height<=480][ext=mp4]/best[ext=mp4]/best',  // Fallback format selection
+      '-f', 'best[height<=1080][ext=mp4]/best[ext=mp4]/best',  // Fallback format selection
       '--max-filesize', '10M',
-      '--socket-timeout', '30',
+      '--socket-timeout', '60',
       '--retries', '3',
       '--no-playlist',
       '--newline',
@@ -474,11 +758,11 @@ ipcMain.handle('youtube-search', async (event, query) => {
           part: 'snippet',
           type: 'video',
           maxResults: 12,
-          q: query.trim() + ' dance tutorial',
-          key: 'AIzaSyA-2tVSmZeH84nMPSagvzmR6LU-LK9DlP4',
+          q: query.trim(),
+          key: 'AIzaSyCnYR4E6pNBl-oHscWZOE_akXbmOtT7FfI',
           safeSearch: 'strict'
         },
-        timeout: 15000
+        timeout: 60000
       }
     );
 
@@ -564,7 +848,7 @@ ipcMain.handle('download-video', async (event, videoId) => {
         '-f', 'best[height<=480][ext=mp4]/bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
         '--merge-output-format', 'mp4',
         '--max-filesize', '25M',
-        '--socket-timeout', '30',
+        '--socket-timeout', '60',
         '--retries', '3',
         '--fragment-retries', '3',
         '--no-playlist',
@@ -807,3 +1091,286 @@ process.on('unhandledRejection', (reason, promise) => {
 
 console.log('📁 Videos will be stored in:', videosDir);
 console.log('🎬 Stepwise Studio main process loaded');
+
+// Window state management
+class WindowStateManager {
+  constructor() {
+    this.stateFile = path.join(app.getPath('userData'), 'window-state.json');
+    this.defaultState = {
+      width: 1400,
+      height: 900,
+      x: undefined,
+      y: undefined,
+      isMaximized: false,
+      isFullScreen: false
+    };
+  }
+
+  // Load saved window state
+  loadState() {
+    try {
+      if (fs.existsSync(this.stateFile)) {
+        const data = fs.readFileSync(this.stateFile, 'utf8');
+        const state = JSON.parse(data);
+        
+        // Validate the state (make sure window isn't off-screen)
+        const { screen } = require('electron');
+        const displays = screen.getAllDisplays();
+        const display = displays.find(d => 
+          state.x >= d.bounds.x && state.x < d.bounds.x + d.bounds.width &&
+          state.y >= d.bounds.y && state.y < d.bounds.y + d.bounds.height
+        );
+        
+        if (!display) {
+          // Window is off-screen, use default position
+          state.x = undefined;
+          state.y = undefined;
+        }
+        
+        return { ...this.defaultState, ...state };
+      }
+    } catch (error) {
+      console.warn('Could not load window state:', error.message);
+    }
+    return this.defaultState;
+  }
+
+  // Save current window state
+  saveState(window) {
+    try {
+      const bounds = window.getBounds();
+      const state = {
+        width: bounds.width,
+        height: bounds.height,
+        x: bounds.x,
+        y: bounds.y,
+        isMaximized: window.isMaximized(),
+        isFullScreen: window.isFullScreen()
+      };
+      
+      fs.writeFileSync(this.stateFile, JSON.stringify(state, null, 2));
+      console.log('Window state saved');
+    } catch (error) {
+      console.warn('Could not save window state:', error.message);
+    }
+  }
+
+  // Set up window state tracking
+  manage(window) {
+    // Save state when window is moved, resized, or state changes
+    const saveState = () => this.saveState(window);
+    
+    window.on('resize', saveState);
+    window.on('move', saveState);
+    window.on('maximize', saveState);
+    window.on('unmaximize', saveState);
+    window.on('enter-full-screen', saveState);
+    window.on('leave-full-screen', saveState);
+    
+    // Save state before closing
+    window.on('close', saveState);
+  }
+}
+
+// Create window state manager
+const windowStateManager = new WindowStateManager();
+
+// Modified createWindow function
+function createWindow() {
+  // Load previous window state
+  const windowState = windowStateManager.loadState();
+  
+  mainWindow = new BrowserWindow({
+    width: windowState.width,
+    height: windowState.height,
+    x: windowState.x,
+    y: windowState.y,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js')
+    },
+    icon: path.join(__dirname, 'assets', 'stepwise-icon.png'),
+    show: false
+  });
+
+  // Restore maximized/fullscreen state
+  mainWindow.once('ready-to-show', () => {
+    if (windowState.isMaximized) {
+      mainWindow.maximize();
+    }
+    if (windowState.isFullScreen) {
+      mainWindow.setFullScreen(true);
+    }
+    mainWindow.show();
+    console.log('✅ Electron window ready with restored state');
+  });
+
+  // Set up state tracking
+  windowStateManager.manage(mainWindow);
+
+  mainWindow.loadFile('src/index.html');
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
+
+  if (process.env.NODE_ENV === 'development') {
+    mainWindow.webContents.openDevTools();
+  }
+}
+
+// Enhanced user preferences management
+class UserPreferencesManager {
+  constructor() {
+    this.preferencesFile = path.join(app.getPath('userData'), 'user-preferences.json');
+    this.defaultPreferences = {
+      // Video player preferences
+      volume: 1,
+      playbackRate: 1,
+      loopMode: false,
+      loopStartTime: 0,
+      loopEndTime: 10,
+      mirrorMode: false,
+      
+      // UI preferences
+      lastSearchQuery: '',
+      savedVideos: [],
+      recentVideos: [],
+      theme: 'default',
+      
+      // App state
+      lastVideoId: null,
+      lastVideoTitle: '',
+      lastThumbnail: '',
+      currentVideoTime: 0,
+      
+      // Session data
+      totalPracticeTime: 0,
+      sessionCount: 0,
+      lastSessionDate: null
+    };
+  }
+
+  // Load preferences
+  loadPreferences() {
+    try {
+      if (fs.existsSync(this.preferencesFile)) {
+        const data = fs.readFileSync(this.preferencesFile, 'utf8');
+        const preferences = JSON.parse(data);
+        return { ...this.defaultPreferences, ...preferences };
+      }
+    } catch (error) {
+      console.warn('Could not load preferences:', error.message);
+    }
+    return this.defaultPreferences;
+  }
+
+  // Save preferences
+  savePreferences(preferences) {
+    try {
+      fs.writeFileSync(this.preferencesFile, JSON.stringify(preferences, null, 2));
+      console.log('User preferences saved');
+    } catch (error) {
+      console.warn('Could not save preferences:', error.message);
+    }
+  }
+
+  // Get specific preference
+  get(key) {
+    const preferences = this.loadPreferences();
+    return preferences[key];
+  }
+
+  // Set specific preference
+  set(key, value) {
+    const preferences = this.loadPreferences();
+    preferences[key] = value;
+    this.savePreferences(preferences);
+  }
+
+  // Update multiple preferences
+  update(updates) {
+    const preferences = this.loadPreferences();
+    Object.assign(preferences, updates);
+    this.savePreferences(preferences);
+  }
+}
+
+// Create preferences manager
+const preferencesManager = new UserPreferencesManager();
+
+// IPC handlers for preferences
+ipcMain.handle('get-preferences', () => {
+  return preferencesManager.loadPreferences();
+});
+
+ipcMain.handle('save-preferences', (event, preferences) => {
+  preferencesManager.savePreferences(preferences);
+  return true;
+});
+
+ipcMain.handle('get-preference', (event, key) => {
+  return preferencesManager.get(key);
+});
+
+ipcMain.handle('set-preference', (event, key, value) => {
+  preferencesManager.set(key, value);
+  return true;
+});
+
+ipcMain.handle('update-preferences', (event, updates) => {
+  preferencesManager.update(updates);
+  return true;
+});
+
+// Session tracking
+let sessionStartTime = Date.now();
+
+ipcMain.handle('get-session-time', () => {
+  return Date.now() - sessionStartTime;
+});
+
+ipcMain.handle('save-session-data', (event, data) => {
+  const sessionTime = Date.now() - sessionStartTime;
+  const currentPrefs = preferencesManager.loadPreferences();
+  
+  preferencesManager.update({
+    totalPracticeTime: (currentPrefs.totalPracticeTime || 0) + sessionTime,
+    sessionCount: (currentPrefs.sessionCount || 0) + 1,
+    lastSessionDate: new Date().toISOString(),
+    ...data
+  });
+  
+  return true;
+});
+
+// Auto-save preferences periodically
+setInterval(() => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    // Save current state
+    mainWindow.webContents.send('auto-save-preferences');
+  }
+}, 30000); // Save every 30 seconds
+
+// Save everything before app quits
+app.on('before-quit', () => {
+  console.log('🔄 Saving app state before quit...');
+  
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    windowStateManager.saveState(mainWindow);
+    // Send message to renderer to save current state
+    mainWindow.webContents.send('app-closing');
+  }
+});
+
+// Handle window-all-closed differently to ensure state is saved
+app.on('window-all-closed', () => {
+  // Don't quit immediately on macOS
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
+});
+
+console.log('📁 App data will be stored in:', app.getPath('userData'));
+console.log('💾 Window state and preferences will be automatically saved');
