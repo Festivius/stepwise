@@ -462,7 +462,7 @@ function createMenu() {
             dialog.showMessageBox(mainWindow, {
               type: 'info',
               title: 'Cleanup Complete',
-              message: 'Old videos have been cleaned up',
+              message: 'Video cache has been cleared',
               buttons: ['OK']
             });
           }
@@ -851,7 +851,7 @@ ipcMain.handle('download-video', async (event, videoId) => {
         '--retry-sleep', '2',       // Wait between retries
         
         // File size and quality
-        '--max-filesize', '200M',    // Increased size limit for longer videos
+        '--max-filesize', '1000M',    // Increased size limit for longer videos
         
         // Output and progress
         '--no-playlist',
@@ -962,7 +962,7 @@ ipcMain.handle('download-video', async (event, videoId) => {
         } else if (stderrLower.includes('private video') || stderrLower.includes('private')) {
           errorMessage = 'This video is private and cannot be downloaded';
         } else if (stderrLower.includes('too large') || stderrLower.includes('filesize')) {
-          errorMessage = 'Video file is too large (>200MB limit)';
+          errorMessage = 'Video file is too large (>1000MB limit)';
         } else if (stderrLower.includes('unable to extract') || stderrLower.includes('no video formats')) {
           errorMessage = 'Unable to extract video - it may be restricted. Trying alternative method...';
           
@@ -1050,7 +1050,7 @@ async function attemptAlternativeDownload(videoId, outputPath) {
       
       // Simplified format selection
       '-f', 'best[height<=1080]/best',
-      '--max-filesize', '200M',  // Smaller size limit for alternative method
+      '--max-filesize', '1000M',  // Smaller size limit for alternative method
       
       // Basic retry logic
       '--retries', '3',
@@ -1130,7 +1130,7 @@ function cleanupOldVideos() {
   try {
     const files = fs.readdirSync(videosDir);
     const now = Date.now();
-    const maxAge = 24 * 60 * 60 * 1000; // 24 hours
+    const maxAge = 24 * 60 * 60 * 1000 * 0; // 24 hours (now all videos)
 
     let cleaned = 0;
     files.forEach(file => {
@@ -1179,7 +1179,7 @@ async function debugDownload(videoId) {
       '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       '--add-header', 'Accept-Language:en-US,en;q=0.9',
       '-f', 'best[height<=1080]/best',
-      '--max-filesize', '200M',
+      '--max-filesize', '1000M',
       '--retries', '3',
       '--no-playlist',
       '--no-warnings',
