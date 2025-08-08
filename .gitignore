@@ -37,8 +37,11 @@ pids
 dist/
 build/
 
-# Exclude user data directory
-~/Library/Application Support/stepwise-studio/
+/*
+# Plugin files (these are downloaded during build)
+src/bundled-plugin-files.js
+dev-plugins/
 
-# But include bundled plugins in project
-!bundled-plugins/
+# But keep the download script
+!scripts/download-plugin.js
+*/
