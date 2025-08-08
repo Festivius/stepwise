@@ -841,7 +841,7 @@ ipcMain.handle('download-video', async (event, videoId) => {
         '--geo-bypass-ip-block', '0.0.0.0/0',
         
         // Enhanced format selection with fallbacks for age-restricted content
-        '-f', 'best[height<=1080][ext=mp4]/bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/worst[ext=mp4]/best',
+        '-f', 'bestvideo[height=1080][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height=1080]+bestaudio/best[height=1080]/bestvideo[height=720][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height=720]+bestaudio/best[height=720]/best[height<=1080][ext=mp4]/best',
         '--merge-output-format', 'mp4',
         
         // Enhanced retry logic for age-restricted content
@@ -851,7 +851,7 @@ ipcMain.handle('download-video', async (event, videoId) => {
         '--retry-sleep', '2',       // Wait between retries
         
         // File size and quality
-        '--max-filesize', '100M',    // Increased size limit for longer videos
+        '--max-filesize', '200M',    // Increased size limit for longer videos
         
         // Output and progress
         '--no-playlist',
@@ -962,7 +962,7 @@ ipcMain.handle('download-video', async (event, videoId) => {
         } else if (stderrLower.includes('private video') || stderrLower.includes('private')) {
           errorMessage = 'This video is private and cannot be downloaded';
         } else if (stderrLower.includes('too large') || stderrLower.includes('filesize')) {
-          errorMessage = 'Video file is too large (>100MB limit)';
+          errorMessage = 'Video file is too large (>200MB limit)';
         } else if (stderrLower.includes('unable to extract') || stderrLower.includes('no video formats')) {
           errorMessage = 'Unable to extract video - it may be restricted. Trying alternative method...';
           
@@ -1049,8 +1049,8 @@ async function attemptAlternativeDownload(videoId, outputPath) {
       '--user-agent', 'com.google.ios.youtube/17.33.2 (iPhone14,2; U; CPU iOS 15_6 like Mac OS X)',
       
       // Simplified format selection
-      '-f', 'best[height<=720]/worst',
-      '--max-filesize', '30M',  // Smaller size limit for alternative method
+      '-f', 'best[height<=1080]/best',
+      '--max-filesize', '200M',  // Smaller size limit for alternative method
       
       // Basic retry logic
       '--retries', '3',
@@ -1178,8 +1178,8 @@ async function debugDownload(videoId) {
       '--extractor-args', 'youtube:player_client=android,ios',
       '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       '--add-header', 'Accept-Language:en-US,en;q=0.9',
-      '-f', 'best[height<=720]/worst',
-      '--max-filesize', '20M',
+      '-f', 'best[height<=1080]/best',
+      '--max-filesize', '200M',
       '--retries', '3',
       '--no-playlist',
       '--no-warnings',
