@@ -25,6 +25,255 @@
         align-items: center;
       }
 
+      /* STARTUP LOADING SCREEN */
+      .startup-loading {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: linear-gradient(135deg, #f5f1e8 0%, #ede0d4 100%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        opacity: 1;
+        transition: opacity 0.8s ease-out, visibility 0.8s ease-out;
+      }
+
+      .startup-loading.hidden {
+        opacity: 0;
+        visibility: hidden;
+      }
+
+      .startup-logo {
+        width: 120px;
+        height: 120px;
+        margin-bottom: 30px;
+        filter: drop-shadow(0 4px 20px rgba(138, 122, 109, 0.3));
+        animation: gentle-float 3s ease-in-out infinite;
+      }
+
+      @keyframes gentle-float {
+        0%, 100% { 
+          transform: translateY(0) rotate(0deg) scale(1); 
+        }
+        25% { 
+          transform: translateY(-8px) rotate(-3deg) scale(1.05); 
+        }
+        50% { 
+          transform: translateY(-12px) rotate(0deg) scale(1.1); 
+        }
+        75% { 
+          transform: translateY(-8px) rotate(3deg) scale(1.05); 
+        }
+      }
+
+      .startup-title {
+        font-size: 3rem;
+        font-weight: 600;
+        font-family: 'Comfortaa', cursive;
+        color: #8a7a6d;
+        letter-spacing: 1px;
+        text-shadow: 0 3px 8px rgba(138, 122, 109, 0.2);
+        margin-bottom: 10px;
+        animation: fade-in-up 1s ease-out 0.5s both;
+      }
+
+      .startup-tagline {
+        color: #8a9b6e;
+        font-size: 1.2rem;
+        font-weight: 500;
+        letter-spacing: 2px;
+        margin-bottom: 40px;
+        animation: fade-in-up 1s ease-out 0.7s both;
+      }
+
+      .startup-spinner {
+        width: 60px;
+        height: 60px;
+        border: 4px solid rgba(138, 155, 110, 0.2);
+        border-top: 4px solid #8a9b6e;
+        border-radius: 50%;
+        animation: spin 1.5s linear infinite;
+        margin-bottom: 20px;
+      }
+
+      .startup-status {
+        color: #6b7280;
+        font-size: 1rem;
+        font-weight: 400;
+        animation: fade-in-up 1s ease-out 0.9s both;
+      }
+
+      @keyframes fade-in-up {
+        from {
+          opacity: 0;
+          transform: translateY(20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+
+      /* VIDEO DOWNLOAD LOADING OVERLAY */
+      .video-loading-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(245, 241, 232, 0.95);
+        backdrop-filter: blur(10px);
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 100;
+        border-radius: 20px;
+        transition: all 0.3s ease;
+      }
+
+      .video-loading-overlay.visible {
+        display: flex;
+      }
+
+      .download-dancer {
+        width: 80px;
+        height: 80px;
+        margin-bottom: 25px;
+        filter: drop-shadow(0 3px 15px rgba(138, 155, 110, 0.3));
+        animation: dance-loading 2s ease-in-out infinite;
+      }
+
+      @keyframes dance-loading {
+        0%, 100% { 
+          transform: translateY(0) rotate(0deg) scale(1); 
+        }
+        25% { 
+          transform: translateY(-10px) rotate(-5deg) scale(1.1); 
+        }
+        50% { 
+          transform: translateY(-5px) rotate(5deg) scale(0.95); 
+        }
+        75% { 
+          transform: translateY(-15px) rotate(-3deg) scale(1.05); 
+        }
+      }
+
+      .download-title {
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: #8a7a6d;
+        margin-bottom: 10px;
+        text-align: center;
+        font-family: 'Comfortaa', cursive;
+      }
+
+      .download-subtitle {
+        color: #6b7280;
+        font-size: 1rem;
+        margin-bottom: 30px;
+        text-align: center;
+        max-width: 300px;
+      }
+
+      /* PROGRESS BAR */
+      .progress-wrapper {
+        width: 300px;
+        margin-bottom: 20px;
+      }
+
+      .progress-bar {
+        width: 100%;
+        height: 8px;
+        background: rgba(138, 155, 110, 0.2);
+        border-radius: 10px;
+        overflow: hidden;
+        position: relative;
+        box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+
+      .progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #8a9b6e 0%, #b8b09c 50%, #8a9b6e 100%);
+        border-radius: 10px;
+        width: 0%;
+        transition: width 0.3s ease;
+        position: relative;
+        box-shadow: 0 2px 8px rgba(138, 155, 110, 0.4);
+      }
+
+      .progress-fill::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+        animation: shimmer 2s infinite;
+      }
+
+      @keyframes shimmer {
+        0% { transform: translateX(-100%); }
+        100% { transform: translateX(100%); }
+      }
+
+      .progress-text {
+        text-align: center;
+        margin-top: 10px;
+        font-size: 0.9rem;
+        color: #8a9b6e;
+        font-weight: 500;
+        font-family: monospace;
+      }
+
+      .download-tips {
+        text-align: center;
+        font-size: 0.8rem;
+        color: #9ca3af;
+        max-width: 280px;
+        line-height: 1.4;
+      }
+
+      /* PULSING DOTS ANIMATION */
+      .loading-dots {
+        display: inline-flex;
+        gap: 4px;
+        margin-left: 8px;
+      }
+
+      .loading-dots span {
+        width: 6px;
+        height: 6px;
+        background: #8a9b6e;
+        border-radius: 50%;
+        animation: pulse-dot 1.4s infinite ease-in-out;
+      }
+
+      .loading-dots span:nth-child(1) { animation-delay: -0.32s; }
+      .loading-dots span:nth-child(2) { animation-delay: -0.16s; }
+      .loading-dots span:nth-child(3) { animation-delay: 0s; }
+
+      @keyframes pulse-dot {
+        0%, 80%, 100% {
+          transform: scale(0.8);
+          opacity: 0.5;
+        }
+        40% {
+          transform: scale(1);
+          opacity: 1;
+        }
+      }
+
       .header {
         text-align: left;
         margin-bottom: 20px;
@@ -104,6 +353,19 @@
         
         .header .tagline {
           font-size: 0.9rem;
+        }
+
+        .startup-title {
+          font-size: 2.2rem;
+        }
+
+        .progress-wrapper {
+          width: 250px;
+        }
+
+        .download-dancer {
+          width: 60px;
+          height: 60px;
         }
       }
 
@@ -1034,6 +1296,15 @@
   </style>
 </head>
 <body>
+  <!-- STARTUP LOADING SCREEN -->
+  <div class="startup-loading" id="startupLoading">
+    <img src="../assets/stepwise-icon.png" alt="Dancing figure" class="startup-logo">
+    <h1 class="startup-title">Stepwise Studio</h1>
+    <p class="startup-tagline">Precision • Dance • Control</p>
+    <div class="startup-spinner"></div>
+    <p class="startup-status">Loading dance magic<span class="loading-dots"><span></span><span></span><span></span></span></p>
+  </div>
+
   <div class="header">
     <img src="../assets/stepwise-icon.png" alt="Dancing figure icon" class="header-icon">
     <div class="header-content">
@@ -1056,6 +1327,22 @@
     <div class="player-container">
       <section class="player-section">
         <div class="video-container">
+          <!-- VIDEO DOWNLOAD LOADING OVERLAY -->
+          <div class="video-loading-overlay" id="videoLoadingOverlay">
+            <img src="../assets/stepwise-icon.png" alt="Dancing figure" class="download-dancer">
+            <h3 class="download-title">Loading Video</h3>
+            <p class="download-subtitle">Preparing your dance tutorial<span class="loading-dots"><span></span><span></span><span></span></span></p>
+            
+            <div class="progress-wrapper">
+              <div class="progress-bar">
+                <div class="progress-fill" id="downloadProgress"></div>
+              </div>
+              <div class="progress-text" id="progressText">0%</div>
+            </div>
+            
+            <p class="download-tips">This may take a moment depending on video quality and your internet connection</p>
+          </div>
+
           <div id="videoTitle"></div>
           <video id="videoPlayer" preload="metadata"></video>
           
@@ -1206,6 +1493,42 @@
       alert('This application must be run through Electron');
     }
 
+    // STARTUP LOADING SCREEN MANAGEMENT
+    const startupLoading = document.getElementById('startupLoading');
+
+    // Simulate startup loading process
+    function initializeApp() {
+      const loadingStatuses = [
+        'Loading dance magic...',
+        'Initializing video player...',
+        'Connecting to YouTube...',
+        'Preparing workspace...',
+        'Almost ready...'
+      ];
+
+      let currentStatus = 0;
+      const statusElement = startupLoading.querySelector('.startup-status');
+
+      const updateStatus = () => {
+        if (currentStatus < loadingStatuses.length) {
+          statusElement.innerHTML = loadingStatuses[currentStatus] + '<span class="loading-dots"><span></span><span></span><span></span></span>';
+          currentStatus++;
+          setTimeout(updateStatus, 800);
+        } else {
+          // Hide startup screen
+          setTimeout(() => {
+            startupLoading.classList.add('hidden');
+            setTimeout(() => {
+              startupLoading.style.display = 'none';
+            }, 800);
+          }, 500);
+        }
+      };
+
+      // Start the loading sequence
+      setTimeout(updateStatus, 1000);
+    }
+
     // Set app version in footer
     if (window.electronAPI) {
       window.electronAPI.getAppVersion().then(version => {
@@ -1273,6 +1596,11 @@
     const clearSavedBtn = document.getElementById('clearSaved');
     const saveNotification = document.getElementById('saveNotification');
 
+    // NEW: Video loading overlay elements
+    const videoLoadingOverlay = document.getElementById('videoLoadingOverlay');
+    const downloadProgress = document.getElementById('downloadProgress');
+    const progressText = document.getElementById('progressText');
+
     // Playback bar elements
     const progressContainer = document.querySelector('.progress-container');
     const playbackBar = document.querySelector('.playback-bar');
@@ -1298,9 +1626,62 @@
     const speeds = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2];
     let currentSpeedIndex = 3; // 1x is default
 
+    // ENHANCED DOWNLOAD PROGRESS SIMULATION
+    function simulateDownloadProgress() {
+      let progress = 0;
+      isVideoActuallyLoaded = false;
+      
+      // Clear any existing simulation
+      if (progressSimulation) {
+        clearInterval(progressSimulation);
+      }
+      
+      progressSimulation = setInterval(() => {
+        if (progress < 75) {
+          // Fast initial progress for first 30%
+          if (progress < 30) {
+            progress += Math.random() * 8 + 5;
+          }
+          // Slower progress from 30% to 75%
+          else {
+            progress += Math.random() * 3 + 1;
+          }
+        } else if (progress < 91 && !isVideoActuallyLoaded) {
+          // Very slow progress from 75% to 91% while waiting for actual video
+          progress += Math.random() * 0.5 + 0.2;
+        } else if (isVideoActuallyLoaded) {
+          // Complete quickly once video is actually loaded
+          progress = Math.min(100, progress + 10);
+          if (progress >= 100) {
+            clearInterval(progressSimulation);
+            progressText.textContent = 'Complete!';
+            setTimeout(() => {
+              hideVideoLoadingOverlay();
+            }, 500);
+            return;
+          }
+        }
+        
+        progress = Math.min(91, progress); // Cap at 95% until video loads
+        downloadProgress.style.width = progress + '%';
+        progressText.textContent = Math.floor(progress) + '%';
+      }, 200);
+    }
+
+    function showVideoLoadingOverlay() {
+      videoLoadingOverlay.classList.add('visible');
+      downloadProgress.style.width = '0%';
+      progressText.textContent = '0%';
+    }
+
+    function hideVideoLoadingOverlay() {
+      videoLoadingOverlay.classList.remove('visible');
+    }
+
     // Initialize
     loadUserPreferences();
     updateSavedVideos();
+    initializeApp(); // Start the startup loading sequence
 
     // All the utility functions (same as before)
     function saveUserPreferences() {
@@ -1446,18 +1827,18 @@
       }
     }
 
-    // Download and play video - SIMPLIFIED FOR ELECTRON ONLY
+    // Download and play video - ENHANCED WITH LOADING OVERLAY
     async function downloadAndPlay(videoId) {
-      resultsDiv.innerHTML = '<div class="loading"><i class="fas fa-download"></i>Downloading dance video... Please wait!</div>';
+      // Clear search results
+      resultsDiv.innerHTML = '';
+      
+      // Show video loading overlay
+      showVideoLoadingOverlay();
+      
+      // Start progress simulation
+      simulateDownloadProgress(4000); // 4 second simulation
       
       try {
-        // Use Electron IPC for download
-        const data = await window.electronAPI.downloadVideo(videoId);
-        
-        if (!data.url) throw new Error('No video URL returned');
-        
-        resultsDiv.innerHTML = '';
-        
         // Reset controls when new video is selected
         resetControls();
         
@@ -1465,6 +1846,11 @@
         const cleanTitle = lastVideoTitle.replace(/[^\w\s-]/gi, '');
         videoTitle.textContent = cleanTitle || 'Dance Tutorial';
         videoTitle.style.display = 'block';
+        
+        // Use Electron IPC for download
+        const data = await window.electronAPI.downloadVideo(videoId);
+        
+        if (!data.url) throw new Error('No video URL returned');
         
         // Set video source
         video.src = data.url;
@@ -1485,19 +1871,16 @@
         };
       } catch (err) {
         console.error('Download/playback error:', err);
+        hideVideoLoadingOverlay();
         window.electronAPI.showMessageBox({
           type: 'error',
           title: 'Playback Error',
           message: 'Error playing video',
           detail: err.message
         });
-        resultsDiv.innerHTML = '';
         videoTitle.style.display = 'none';
       }
     }
-
-    // All other functions remain the same as in your original code...
-    // (I'm keeping this shorter to focus on the main changes)
 
     // Update volume icon based on current volume
     function updateVolumeIcon() {
@@ -1940,6 +2323,8 @@
       durationLabel.textContent = formatTime(video.duration);
       loopStartTime = 0;
       loopEndTime = Math.min(video.duration * 0.95, 10);
+
+      setmarkVideoAsLoaded();
       
       if (isLoopMode) {
         updateLoopRangeDisplay();
@@ -2053,7 +2438,7 @@
           saveNotification.style.display = 'none';
         }, 5000);
         setCookie('stepwiseWelcome', true);
-      }, 1000);
+      }, 7000); // Show after startup loading is complete
     }
 
     // Cleanup on page unload
@@ -2310,16 +2695,18 @@
     // Create global state manager
     const stateManager = new AppStateManager();
 
-    // Initialize when DOM is loaded
+    // Initialize when DOM is loaded and startup is complete
     document.addEventListener('DOMContentLoaded', () => {
-      // Wait for electronAPI to be available
-      if (window.electronAPI) {
-        stateManager.initialize();
-      } else {
-        // Fallback for non-Electron environments
-        console.warn('ElectronAPI not available, using localStorage fallback');
-        loadUserPreferences(); // Your existing function
-      }
+      // Wait for startup loading to complete before initializing state
+      setTimeout(() => {
+        if (window.electronAPI) {
+          stateManager.initialize();
+        } else {
+          // Fallback for non-Electron environments
+          console.warn('ElectronAPI not available, using localStorage fallback');
+          loadUserPreferences(); // Your existing function
+        }
+      }, 5000); // Wait for startup loading to complete
     });
 
     // Enhanced save functions that use the state manager
@@ -2363,6 +2750,65 @@
       return originalDownloadAndPlay(videoId);
     };
 
+    let progressSimulation = null;
+    let isVideoActuallyLoaded = false;
+    
+    function simulateDownloadProgress() {
+      let progress = 0;
+      isVideoActuallyLoaded = false;
+      
+      // Clear any existing simulation
+      if (progressSimulation) {
+        clearInterval(progressSimulation);
+      }
+      
+      progressSimulation = setInterval(() => {
+        if (progress < 75) {
+          // Fast initial progress for first 30%
+          if (progress < 30) {
+            progress += Math.random() * 6 + 5;
+          }
+          // Slower progress from 30% to 75%
+          else {
+            progress += Math.random() * 3 + 1;
+          }
+        } else if (progress < 91 && !isVideoActuallyLoaded) {
+          // Very slow progress from 75% to 91% while waiting for actual video
+          progress += Math.random() * 0.8 + 0.2;
+        } else if (isVideoActuallyLoaded) {
+          // Complete quickly once video is actually loaded
+          progress = Math.min(100, progress + 10);
+          if (progress >= 100) {
+            clearInterval(progressSimulation);
+            progressText.textContent = 'Complete!';
+            setTimeout(() => {
+              hideVideoLoadingOverlay();
+            }, 300);
+            return;
+          }
+        }
+        
+        progress = Math.min(91, progress); // Cap at 91% until video loads
+        downloadProgress.style.width = progress + '%';
+        progressText.textContent = Math.floor(progress) + '%';
+      }, 200);
+    }
+    
+    function markVideoAsLoaded() {
+      console.log('markVideoAsLoaded called, isVideoActuallyLoaded:', isVideoActuallyLoaded);
+      isVideoActuallyLoaded = true;
+      
+      console.log('Completing progress simulation');
+      clearInterval(progressSimulation);
+      progressSimulation = null;
+      
+      downloadProgress.style.width = '100%';
+      progressText.textContent = 'Complete!';
+      setTimeout(() => {
+        hideVideoLoadingOverlay();
+      }, 500);
+    }
+
     // Save state when video time updates (throttled)
     let lastTimeSave = 0;
     video.addEventListener('timeupdate', () => {
@@ -2381,6 +2827,7 @@
     });
 
     console.log('💾 Enhanced state management initialized');
+    console.log('🎬 Stepwise Studio loaded with enhanced loading screens!');
   </script>
 </body>
 </html>

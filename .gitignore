@@ -36,3 +36,9 @@ pids
 # Build outputs
 dist/
 build/
+
+# Exclude user data directory
+~/Library/Application Support/stepwise-studio/
+
+# But include bundled plugins in project
+!bundled-plugins/

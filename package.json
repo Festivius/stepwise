@@ -1,6 +1,6 @@
 {
   "name": "stepwise-studio",
-  "version": "1.6.0",
+  "version": "2.0.0",
   "description": "Dance video player with precision controls - Master your moves with looping, speed control, and mirroring",
   "main": "main.js",
   "scripts": {
@@ -70,6 +70,7 @@
       "src/**/*",
       "assets/**/*",
       "binaries/**/*",
+      "bundled-plugins/**/*",
       "main.js",
       "preload.js",
       "package.json",
@@ -81,6 +82,11 @@
       {
         "from": "binaries",
         "to": "binaries",
+        "filter": "**/*"
+      },
+      {
+        "from": "bundled-plugins",
+        "to": "bundled-plugins",
         "filter": "**/*"
       }
     ],
