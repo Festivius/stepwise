@@ -1256,7 +1256,6 @@ ipcMain.handle('save-session-data', (event, data) => {
 });
 
 // App event handlers
-// Add this to your app.whenReady() function:
 app.whenReady().then(async () => {
   try {
     logger.info('Starting Stepwise Studio with embedded bgutil...');
@@ -1264,12 +1263,20 @@ app.whenReady().then(async () => {
     createWindow();
     createMenu();
     
-    // This now sets up everything automatically - no user action needed!
-    await setupPluginsDirectory();
-    await initializeYtDlp();
+    // Don't await these - let them run in background while UI loads
+    setupPluginsDirectory().then(() => {
+      logger.info('✅ Plugin setup complete');
+    }).catch(err => {
+      logger.warn('Plugin setup failed:', err.message);
+    });
     
-    logger.info('🎉 Stepwise Studio ready with automatic PO token support!');
-    logger.info('📊 Users get enhanced YouTube access with zero configuration!');
+    initializeYtDlp().then(() => {
+      logger.info('✅ yt-dlp initialized');
+    }).catch(err => {
+      logger.warn('yt-dlp initialization failed:', err.message);
+    });
+    
+    logger.info('🎉 Stepwise Studio window ready!');
   } catch (err) {
     logger.error('Failed to start application:', err);
     dialog.showErrorBox('Startup Error', `Failed to start Stepwise Studio: ${err.message}`);

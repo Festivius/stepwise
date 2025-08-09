@@ -1513,15 +1513,15 @@
         if (currentStatus < loadingStatuses.length) {
           statusElement.innerHTML = loadingStatuses[currentStatus] + '<span class="loading-dots"><span></span><span></span><span></span></span>';
           currentStatus++;
-          setTimeout(updateStatus, 800);
+          setTimeout(updateStatus, 1600);
         } else {
           // Hide startup screen
           setTimeout(() => {
             startupLoading.classList.add('hidden');
             setTimeout(() => {
               startupLoading.style.display = 'none';
-            }, 800);
-          }, 500);
+            }, 2000);
+          }, 1000);
         }
       };
 
