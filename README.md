@@ -1,6 +1,6 @@
 # Stepwise Studio
 
-Stepwise Studio is a MacOS (for now) app built with Electron that makes it easier to dance than ever before — with features such as easier speed control, custom loop sections, keyboard shortcuts, and more. The perfect tool for learning dances, practicing skills, and finding new hobbies — all available offline.
+Stepwise Studio is an app built with Electron that makes it easier to dance than ever before — with features such as easier speed control, custom loop sections, keyboard shortcuts, and more. The perfect tool for learning dances, practicing skills, and finding new hobbies — all available offline.
 
 ---
 
