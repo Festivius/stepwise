@@ -89,6 +89,7 @@ const checkBgutilAvailability = async () => {
 
 const getYtDlpArgs = (videoId, outputPath, options = {}) => {
   const baseArgs = [
+    '--cookies-from-browser', 'chrome', // macOS will prompt for permission
     '--no-check-certificates',
     '--age-limit', '0',
     '--no-warnings',
