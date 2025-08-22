@@ -1,27 +1,24 @@
+// main.js
+
 const { app, BrowserWindow, ipcMain, dialog, Menu, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const axios = require('axios');
-const { spawn, execSync } = require('child_process');
+const ytdlp = require('yt-dlp-exec');
 
 // Constants
 const isWindows = process.platform === 'win32';
 const isMac = process.platform === 'darwin';
 const videosDir = path.join(app.getPath('userData'), 'videos');
-const pluginsDir = path.join(app.getPath('userData'), 'yt-dlp-plugins');
-const EmbeddedBgutilServer = require('./src/embedded-bgutil-server.js');
 
 // Logging utility
 const logger = {
   info: (msg, ...args) => console.log(`ℹ️ ${msg}`, ...args),
   warn: (msg, ...args) => console.warn(`⚠️ ${msg}`, ...args),
-  error: (msg, ...args) => console.error(`❌ ${msg}`, ...args),
-  debug: (msg, ...args) => process.env.NODE_ENV === 'development' && console.log(`🐛 ${msg}`, ...args)
+  error: (msg, ...args) => console.error(`❌ ${msg}`, ...args)
 };
 
 let mainWindow;
-let ytDlpPath = null;
-let embeddedBgutilServer = null;
 
 // Initialize directories
 if (!fs.existsSync(videosDir)) {
@@ -30,363 +27,20 @@ if (!fs.existsSync(videosDir)) {
 }
 
 // Utility functions
-const findBinary = (binaryName) => {
-  const paths = app.isPackaged 
-    ? [
-        path.join(process.resourcesPath, 'binaries', binaryName),
-        path.join(process.resourcesPath, 'app', 'binaries', binaryName),
-        path.join(process.resourcesPath, 'app.asar.unpacked', 'binaries', binaryName)
-      ]
-    : [
-        path.join(__dirname, 'binaries', binaryName),
-        path.join(process.cwd(), 'binaries', binaryName)
-      ];
-  
-  return paths.find(p => fs.existsSync(p));
-};
-
-const getSpawnOptions = (timeout = 300000) => ({
-  stdio: ['ignore', 'pipe', 'pipe'],
-  windowsHide: isWindows,
-  timeout,
-  env: { ...process.env, PYTHONIOENCODING: 'utf-8' }
-});
-
-const checkBgutilAvailability = async () => {
+function isValidVideoFile(filePath) {
   try {
-    // Check if embedded bgutil server is running
-    let httpAvailable = false;
-    let scriptAvailable = false;
-    
-    // Test HTTP server
-    try {
-      const response = await axios.get('http://127.0.0.1:4416/health', { timeout: 1000 });
-      httpAvailable = response.status === 200;
-    } catch (error) {
-      // HTTP server not available
-    }
-    
-    // For embedded setup, we always have the plugin available
-    scriptAvailable = true;
-    
-    return {
-      httpAvailable,
-      scriptAvailable,
-      embedded: true,
-      automatic: true
-    };
-  } catch (error) {
-    logger.error('Error checking bgutil availability:', error.message);
-    return {
-      httpAvailable: false,
-      scriptAvailable: false,
-      embedded: true,
-      automatic: true,
-      error: error.message
-    };
-  }
-};
-
-const getYtDlpArgs = (videoId, outputPath, options = {}) => {
-  const baseArgs = [
-    '--cookies-from-browser', 'chrome', // macOS will prompt for permission
-    '--no-check-certificates',
-    '--age-limit', '0',
-    '--no-warnings',
-    '--ignore-errors', 
-    '--geo-bypass',
-    '--retries', '8',
-    '--socket-timeout', '120',
-    '--max-filesize', '2000M',
-    '--no-playlist',
-    '--print', 'after_move:Downloaded %(resolution)s %(fps)sfps %(vcodec)s+%(acodec)s [%(filesize_approx)s]',
-    '-o', outputPath,
-    `https://www.youtube.com/watch?v=${videoId}`
-  ];
-  
-  // Add plugin directory if it exists
-  if (fs.existsSync(pluginsDir)) {
-    baseArgs.push('--plugin-dirs', path.resolve(pluginsDir));
-  }
-  
-  // Check if bgutil-ytdlp-pot-provider is available and configure accordingly
-  checkBgutilAvailability().then(bgutilStatus => {
-    if (bgutilStatus.httpAvailable) {
-      // bgutil HTTP server is running - yt-dlp will automatically use it
-      logger.info('Bgutil HTTP server detected - enhanced YouTube access enabled');
-    } else if (bgutilStatus.scriptAvailable) {
-      // bgutil script method available
-      logger.info('Bgutil script method available');
-    } else {
-      logger.info('Bgutil not available - using standard YouTube access');
-    }
-  }).catch(() => {
-    // Ignore errors in async check
-  });
-  
-  if (options.verbose) {
-    baseArgs.unshift('--verbose');
-  }
-  
-  if (options.alternative) {
-    // Alternative strategy for difficult videos
-    baseArgs.push('--extractor-args', 'youtube:player_client=tv_embedded');
-    baseArgs.push('-f', 'best[height<=1080]/best');
-  } else {
-    // Primary strategy
-    const formatSelector = [
-      'bestvideo[height<=1440][fps<=60]+bestaudio[acodec!=none]',
-      'bestvideo[height<=1080][fps<=60]+bestaudio[acodec!=none]',
-      'best[height<=1440]/best[height<=1080]',
-      'bestvideo[height<=720]+bestaudio[acodec!=none]',
-      'best[height<=720]',
-      'best'
-    ].join('/');
-    
-    baseArgs.push('-f', formatSelector);
-  }
-  
-  // Output format preferences
-  baseArgs.push('--merge-output-format', 'mp4');
-  baseArgs.push('--fragment-retries', '10');
-  baseArgs.push('--abort-on-unavailable-fragment');
-  
-  return baseArgs;
-};
-
-const handleDownloadError = (stderr, stdout) => {
-  const stderrLower = stderr.toLowerCase();
-  const stdoutLower = stdout.toLowerCase();
-  
-  // Age restriction errors
-  if (stderrLower.includes('sign in to confirm') || stderrLower.includes('age-restricted') ||
-      stdoutLower.includes('requires age verification')) {
-    return { type: 'age_restricted', retry: true };
-  }
-  
-  // Platform-specific errors
-  if (isWindows) {
-    if (stderrLower.includes('access is denied')) {
-      return { message: 'Permission denied. Try running as administrator or check Windows Defender settings.' };
-    }
-    if (stderrLower.includes('virus') || stderrLower.includes('blocked')) {
-      return { message: 'Download blocked by antivirus. Add Stepwise Studio to your antivirus exclusions.' };
-    }
-  }
-  
-  // Common errors
-  const errorMap = {
-    'video unavailable': 'Video is unavailable or has been removed from YouTube',
-    'private video': 'This video is private and cannot be downloaded',
-    'too large': 'Video file is too large (>1000MB limit)',
-    'http error 403': { type: 'access_denied', retry: true },
-    'http error 404': 'Video not found - it may have been deleted',
-    'unable to extract': { type: 'extraction_failed', retry: true }
-  };
-  
-  for (const [key, value] of Object.entries(errorMap)) {
-    if (stderrLower.includes(key)) {
-      return typeof value === 'string' ? { message: value } : value;
-    }
-  }
-  
-  return { message: 'Download failed' };
-};
-
-// Replace your existing setupPluginsDirectory function with this:
-const setupPluginsDirectory = async () => {
-  try {
-    logger.info('Setting up yt-dlp plugins directory...');
-    
-    // Create plugins directory
-    if (!fs.existsSync(pluginsDir)) {
-      fs.mkdirSync(pluginsDir, { recursive: true });
-      logger.info('Created yt-dlp plugins directory:', pluginsDir);
-    }
-    
-    // Install the embedded plugin
-    const success = await setupBundledPlugin();
-    
-    if (success) {
-      logger.info('Embedded PO token plugin installed successfully');
-      
-      // Start the embedded bgutil server
-      try {
-        embeddedBgutilServer = new EmbeddedBgutilServer();
-        await embeddedBgutilServer.start();
-        logger.info('✅ Embedded bgutil server started - users get automatic PO tokens!');
-      } catch (error) {
-        logger.warn('Embedded server failed to start, plugin will work standalone:', error.message);
-        // Not fatal - the Python plugin can generate tokens directly
-      }
-      
-      return true;
-    } else {
-      logger.error('Embedded plugin installation failed');
-      return false;
-    }
-    
-  } catch (error) {
-    logger.error('Plugin setup failed:', error.message);
+    const stats = fs.statSync(filePath);
+    return stats.size > 1024 * 1024; // At least 1MB
+  } catch {
     return false;
   }
-};
-
-// Replace your existing setupBundledPlugin function with this:
-const setupBundledPlugin = async () => {
-  try {
-    const pluginPath = path.join(pluginsDir, 'stepwise_embedded_pot');
-    
-    logger.info('Installing embedded PO token plugin...');
-    
-    // Create directory structure
-    const directories = [
-      pluginPath,
-      path.join(pluginPath, 'yt_dlp_plugins'),
-      path.join(pluginPath, 'yt_dlp_plugins', 'postprocessor')
-    ];
-    
-    directories.forEach(dir => {
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-    });
-    
-    // Write bundled plugin files (these will be created by the bundle script)
-    const bundledPluginFiles = require('./src/bundled-plugin-files.js');
-    Object.entries(bundledPluginFiles).forEach(([filePath, content]) => {
-      const fullPath = path.join(pluginPath, filePath);
-      fs.writeFileSync(fullPath, content, 'utf8');
-      logger.debug(`Created plugin file: ${filePath}`);
-    });
-    
-    // Verify installation
-    const requiredFiles = Object.keys(bundledPluginFiles);
-    const allFilesExist = requiredFiles.every(file => {
-      const fullPath = path.join(pluginPath, file);
-      return fs.existsSync(fullPath) && fs.statSync(fullPath).size > 0;
-    });
-    
-    if (allFilesExist) {
-      logger.info('Embedded PO token plugin installed successfully');
-      return true;
-    } else {
-      logger.error('Plugin installation incomplete');
-      return false;
-    }
-    
-  } catch (error) {
-    logger.error('Failed to install embedded plugin:', error.message);
-    return false;
-  }
-};
-
-// Update your checkPOTokenPluginStatus function:
-const checkPOTokenPluginStatus = async () => {
-  try {
-    const pluginPath = path.join(pluginsDir, 'stepwise_embedded_pot');
-    const mainFile = path.join(pluginPath, 'yt_dlp_plugins', 'postprocessor', 'embedded_pot_provider.py');
-    
-    const installed = fs.existsSync(mainFile);
-    
-    // Check if embedded server is running
-    let serverRunning = false;
-    if (embeddedBgutilServer) {
-      try {
-        const response = await axios.get('http://127.0.0.1:4416/health', { timeout: 1000 });
-        serverRunning = response.status === 200;
-      } catch (error) {
-        // Server not responding
-      }
-    }
-    
-    return {
-      installed,
-      path: installed ? pluginPath : null,
-      bundled: true,
-      embedded: true,
-      serverRunning,
-      type: 'embedded_pot_provider',
-      automatic: true // This is the key - it's automatic!
-    };
-  } catch (error) {
-    logger.error('Error checking plugin status:', error.message);
-    return { 
-      installed: false, 
-      path: null, 
-      bundled: false,
-      embedded: false,
-      serverRunning: false,
-      automatic: false,
-      error: error.message 
-    };
-  }
-};
-
-// Update your testYtDlpWithPlugin function:
-const testYtDlpWithPlugin = async () => {
-  return new Promise((resolve) => {
-    const testArgs = [
-      '--version',
-      '--plugin-dirs', path.resolve(pluginsDir),
-      '--list-postprocessors',
-      '--verbose'
-    ];
-    
-    const testProcess = spawn(ytDlpPath, testArgs, getSpawnOptions(30000));
-    let output = '';
-    let error = '';
-    
-    testProcess.stdout.on('data', (data) => output += data.toString());
-    testProcess.stderr.on('data', (data) => error += data.toString());
-    
-    testProcess.on('close', async (code) => {
-      // Check for plugin indicators
-      const pluginLoaded = 
-        error.includes('stepwise') || 
-        error.includes('EmbeddedPotProvider') ||
-        error.includes('embedded_pot_provider') ||
-        output.includes('EmbeddedPotProvider');
-      
-      // Check embedded server
-      let serverStatus = false;
-      try {
-        const response = await axios.get('http://127.0.0.1:4416/health', { timeout: 1000 });
-        serverStatus = response.status === 200;
-      } catch (e) {
-        // Server not running
-      }
-      
-      resolve({ 
-        success: code === 0,
-        version: output.split('\n')[0] || 'unknown',
-        pluginLoaded,
-        embeddedServerRunning: serverStatus,
-        embeddedPotEnabled: pluginLoaded, // Plugin provides tokens directly
-        automaticSetup: true, // Key indicator for users
-        stderr: error.substring(0, 1000),
-        stdout: output.substring(0, 1000)
-      });
-    });
-    
-    testProcess.on('error', (error) => {
-      resolve({ 
-        success: false, 
-        error: error.message,
-        pluginLoaded: false,
-        embeddedServerRunning: false,
-        embeddedPotEnabled: false,
-        automaticSetup: false
-      });
-    });
-  });
-};
+}
 
 function cleanupOldVideos() {
   try {
     const files = fs.readdirSync(videosDir);
     const now = Date.now();
-    const maxAge = 0; // 0 hours
+    const maxAge = 0;
 
     let cleaned = 0;
     files.forEach(file => {
@@ -401,7 +55,7 @@ function cleanupOldVideos() {
         logger.warn('Could not clean up file:', file);
       }
     });
-    
+
     if (cleaned > 0) logger.info(`Cleaned up ${cleaned} old video(s)`);
   } catch (err) {
     logger.error('Cleanup error:', err.message);
@@ -421,191 +75,280 @@ function getDiskSpace() {
   }
 }
 
-// Initialize yt-dlp
-async function initializeYtDlp() {
-  try {
-    logger.info('Initializing yt-dlp...');
-    
-    const binaryName = isWindows ? 'yt-dlp.exe' : (isMac ? 'yt-dlp-macos' : 'yt-dlp-linux');
-    ytDlpPath = findBinary(binaryName);
-    
-    if (!ytDlpPath) {
-      throw new Error(`yt-dlp binary not found for ${binaryName}`);
-    }
-    
-    const stats = fs.statSync(ytDlpPath);
-    if (stats.size < 100000) {
-      logger.warn('Binary file seems too small, might be corrupted');
-    }
-    
-    if (!isWindows) {
-      execSync(`chmod +x "${ytDlpPath}"`);
-    }
-    
-    const testResult = await testYtDlp();
-    logger.info(testResult.success ? 'yt-dlp ready' : 'yt-dlp test failed but continuing');
-    return true;
-    
-  } catch (error) {
-    logger.error('Failed to initialize yt-dlp:', error.message);
-    ytDlpPath = null;
-    
-    if (app.isReady()) {
-      dialog.showMessageBox(mainWindow, {
-        type: 'warning',
-        title: 'yt-dlp Warning',
-        message: 'Video downloader may not work properly',
-        detail: `Warning: ${error.message}`,
-        buttons: ['OK']
-      });
-    }
-    return false;
+// ---------- Format helpers (place near other utilities) ----------
+function pick1080PolicyFormats(formats) {
+  // Keep only actual video formats with a height
+  const vfmts = formats.filter(f => f.vcodec && f.vcodec !== 'none' && Number.isFinite(f.height));
+  const afmts = formats.filter(f => f.acodec && f.acodec !== 'none' && (!f.vcodec || f.vcodec === 'none'));
+
+  if (!vfmts.length) return { format: 'best', note: 'no-video-formats', summary: 'No video formats found' };
+
+  // Determine the best height we are allowed to fetch (<=1080) and prefer exactly 1080
+  const heights = [...new Set(vfmts.map(f => f.height))].sort((a, b) => b - a);
+  const has1080 = heights.includes(1080);
+  const bestAllowedHeight = heights.find(h => h <= 1080);
+  const targetHeight = has1080 ? 1080 : (bestAllowedHeight ?? heights[0]);
+
+  // Prefer progressive mp4 at targetHeight when available (simplest path)
+  const progressiveAtTarget = vfmts
+    .filter(f => f.height === targetHeight && f.acodec && f.acodec !== 'none')
+    .sort((a, b) => {
+      // prioritize mp4 + h264/aac, then higher tbr/fps
+      const score = fmt => (
+        (fmt.ext === 'mp4' ? 3 : 0) +
+        (/avc1|h264/i.test(fmt.vcodec) ? 2 : 0) +
+        (/m4a|aac/i.test(fmt.acodec) ? 1 : 0)
+      );
+      return (score(b) - score(a)) || ((b.tbr || 0) - (a.tbr || 0)) || ((b.fps || 0) - (a.fps || 0));
+    });
+
+  if (progressiveAtTarget.length) {
+    const p = progressiveAtTarget[0];
+    return {
+      format: `${p.format_id}`,
+      targetHeight,
+      requiresRecode: p.ext !== 'mp4' || !/avc1|h264/i.test(p.vcodec) || !/m4a|aac/i.test(p.acodec),
+      note: 'progressive',
+      summary: `${p.height}p • ${p.fps || 30}fps • ${p.vcodec}+${p.acodec} • ${p.ext}`
+    };
+  }
+
+  // Otherwise, prefer video-only + audio merge at target height
+  const videoOnlyAtTarget = vfmts
+    .filter(f => f.height === targetHeight && (!f.acodec || f.acodec === 'none'))
+    .sort((a, b) => {
+      // prefer mp4 container and avc1/h264 for mp4-friendly merge
+      const score = fmt => (
+        (fmt.ext === 'mp4' ? 3 : 0) +
+        (/avc1|h264/i.test(fmt.vcodec) ? 2 : 0) +
+        ((fmt.fps || 0) >= 60 ? 1 : 0)
+      );
+      return (score(b) - score(a)) || ((b.tbr || 0) - (a.tbr || 0));
+    });
+
+  const bestAudio = afmts
+    .sort((a, b) => {
+      const score = fmt => (
+        (/m4a|aac/i.test(fmt.acodec) ? 2 : 0) + // mp4-friendly first
+        (fmt.ext === 'm4a' ? 1 : 0)
+      );
+      return (score(b) - score(a)) || ((b.abr || 0) - (a.abr || 0));
+    })[0];
+
+  if (videoOnlyAtTarget.length && bestAudio) {
+    const v = videoOnlyAtTarget[0];
+    const a = bestAudio;
+    const mp4Friendly = (v.ext === 'mp4' && /avc1|h264/i.test(v.vcodec)) && (/m4a|aac/i.test(a.acodec));
+    return {
+      format: `${v.format_id}+${a.format_id}`,
+      targetHeight,
+      requiresRecode: !mp4Friendly,
+      note: 'separate-av',
+      summary: `${v.height}p${v.fps ? ` • ${v.fps}fps` : ''} • ${v.vcodec}+${a.acodec} • ${v.ext}+${a.ext}`
+    };
+  }
+
+  // Fallback: best ≤1080 (whatever it is)
+  return {
+    format: "bv*[height=1080]+ba/b[height=1080]/bv*[height<=1080]+ba/b[height<=1080]",
+    targetHeight,
+    requiresRecode: false,
+    note: 'fallback-selector',
+    summary: `best ≤${targetHeight}p (auto)`
+  };
+}
+
+async function probeVideoInfo(videoUrl, baseOptions = {}) {
+  const result = await ytdlp(videoUrl, {
+    ...baseOptions,
+    dumpSingleJson: true,
+    noPlaylist: true,
+    simulate: true,
+    skipDownload: true,
+    noWarnings: true,
+    quiet: true
+  });
+
+  // yt-dlp-exec may already parse JSON for us
+  if (typeof result === 'string' || Buffer.isBuffer(result)) {
+    return JSON.parse(String(result));
+  } else if (typeof result === 'object' && result !== null) {
+    return result; // already parsed
+  } else {
+    throw new Error('Unexpected yt-dlp probe output type: ' + typeof result);
   }
 }
 
-async function testYtDlp() {
-  return new Promise((resolve) => {
-    const testProcess = spawn(ytDlpPath, ['--version'], getSpawnOptions(60000));
-    let output = '';
-    
-    testProcess.stdout.on('data', (data) => output += data.toString());
-    testProcess.on('close', (code) => {
-      resolve({ 
-        success: code === 0 && output.trim(), 
-        version: output.trim(),
-        error: code !== 0 ? `Exit code ${code}` : null 
-      });
-    });
-    testProcess.on('error', (error) => resolve({ success: false, error: error.message }));
-    
-    setTimeout(() => {
-      testProcess.kill('SIGTERM');
-      resolve({ success: false, error: 'Test timeout' });
-    }, 60000);
-  });
-}
+// ---------- Enforced 1080p-or-lower downloader ----------
+async function downloadVideo(videoId, options = {}) {
+  try {
+    const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    const outputTemplate = path.join(videosDir, `${videoId}.%(ext)s`);
+    const finalMp4Path = path.join(videosDir, `${videoId}.mp4`);
 
-// Main download function
-const executeDownload = (videoId, outputPath, options = {}) => {
-  return new Promise((resolve, reject) => {
-    const args = getYtDlpArgs(videoId, outputPath, options);
-    const downloadProcess = spawn(ytDlpPath, args, getSpawnOptions());
-    
-    let stderr = '';
-    let stdout = '';
-    
-    downloadProcess.stdout.on('data', (data) => {
-      stdout += data.toString();
-      if (options.verbose) logger.info('Download progress:', data.toString().trim());
-    });
-    
-    downloadProcess.stderr.on('data', (data) => {
-      stderr += data.toString();
-      if (options.verbose) logger.warn('Download stderr:', data.toString().trim());
-    });
-    
-    downloadProcess.on('close', (code) => {
-      // Check if file was actually downloaded
-      if (fs.existsSync(outputPath)) {
-        const stats = fs.statSync(outputPath);
-        if (stats.size > 1024) { // File has content
-          const fileUrl = `file:///${outputPath.replace(/\\/g, '/')}`;
-          logger.info(`Download successful: ${videoId} (${Math.round(stats.size / 1024)}KB)`);
-          resolve({ url: fileUrl });
-          return;
-        } else {
-          // Remove empty file
-          fs.unlinkSync(outputPath);
-          logger.warn(`Downloaded file was empty: ${videoId}`);
-        }
-      }
-      
-      // Download failed - try alternative method
-      const error = handleDownloadError(stderr, stdout);
-      if (error.retry && !options.alternative) {
-        logger.info('Primary method failed, trying alternative download method...');
-        
-        // Try alternative method with more lenient settings
-        executeDownload(videoId, outputPath, { 
-          alternative: true,
-          verbose: options.verbose 
-        })
-          .then(resolve)
-          .catch(() => {
-            // If alternative also fails, try one more time with most basic settings
-            logger.info('Alternative method failed, trying basic download...');
-            executeDownloadBasic(videoId, outputPath, options)
-              .then(resolve)
-              .catch(() => reject(new Error(error.message || 'All download methods failed')));
-          });
-      } else {
-        reject(new Error(error.message || 'Download failed'));
-      }
-    });
-    
-    downloadProcess.on('error', (error) => {
-      let errorMsg = `Failed to start download process: ${error.message}`;
-      if (isWindows && error.code === 'ENOENT') {
-        errorMsg = 'yt-dlp executable not found. Check if antivirus software quarantined it.';
-      }
-      reject(new Error(errorMsg));
-    });
-  });
-};
-
-const executeDownloadBasic = (videoId, outputPath, options = {}) => {
-  return new Promise((resolve, reject) => {
-    // Most basic args that should work for any video
-    const basicArgs = [
-      '--no-check-certificates',
-      '--ignore-errors',
-      '--no-playlist',
-      '-f', 'best/worst', // Accept ANY available format
-      '-o', outputPath,
-      `https://www.youtube.com/watch?v=${videoId}`
-    ];
-    
-    if (options.verbose) {
-      basicArgs.unshift('--verbose');
+    // use cached file if valid
+    if (fs.existsSync(finalMp4Path) && isValidVideoFile(finalMp4Path)) {
+      const fileUrl = `file:///${finalMp4Path.replace(/\\/g, '/')}`;
+      logger.info('Video already cached:', videoId);
+      return { url: fileUrl };
     }
-    
-    const downloadProcess = spawn(ytDlpPath, basicArgs, getSpawnOptions());
-    
-    let stderr = '';
-    let stdout = '';
-    
-    downloadProcess.stdout.on('data', (data) => {
-      stdout += data.toString();
-      if (options.verbose) logger.info('Basic download:', data.toString().trim());
-    });
-    
-    downloadProcess.stderr.on('data', (data) => {
-      stderr += data.toString();
-      if (options.verbose) logger.warn('Basic download stderr:', data.toString().trim());
-    });
-    
-    downloadProcess.on('close', (code) => {
-      if (fs.existsSync(outputPath)) {
-        const stats = fs.statSync(outputPath);
-        if (stats.size > 1024) {
-          const fileUrl = `file:///${outputPath.replace(/\\/g, '/')}`;
-          logger.info(`Basic download successful: ${videoId}`);
-          resolve({ url: fileUrl });
-          return;
-        } else {
-          fs.unlinkSync(outputPath);
-        }
+
+    logger.info('Starting video download with 1080p policy:', videoId);
+
+    // Client strategies reused for both probing and download
+    const clientStrategies = [
+      {
+        name: "Fresh Session (Web-like)",
+        base: {
+          addHeader: [
+            'User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
+            'Accept-Language:en-US,en;q=0.9'
+          ],
+          geoBypass: true,
+          noPlaylist: true,
+          retries: 10,
+          fragmentRetries: 15,
+          socketTimeout: 120
+        },
+        extractorArgs: null
+      },
+      {
+        name: "Android Client",
+        base: {
+          addHeader: ['User-Agent:com.google.android.youtube/17.31.35 (Linux; U; Android 11) gzip'],
+          geoBypass: true,
+          noPlaylist: true,
+          retries: 10
+        },
+        extractorArgs: 'youtube:player_client=android'
+      },
+      {
+        name: "TV Client",
+        base: {
+          addHeader: ['User-Agent:Mozilla/5.0 (ChromiumStylePlatform) Cobalt/40.13031.0'],
+          geoBypass: true,
+          noPlaylist: true,
+          retries: 10
+        },
+        extractorArgs: 'youtube:player_client=tv_embedded'
+      },
+      {
+        name: "Web Client (explicit)",
+        base: {
+          addHeader: [
+            'User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept-Language:en-US,en;q=0.9',
+            'Sec-Fetch-Mode:navigate'
+          ],
+          geoBypass: true,
+          noPlaylist: true,
+          retries: 15
+        },
+        extractorArgs: 'youtube:player_client=web'
       }
-      
-      const error = handleDownloadError(stderr, stdout);
-      reject(new Error(error.message || 'Basic download failed'));
-    });
-    
-    downloadProcess.on('error', (error) => {
-      reject(new Error(`Basic download process failed: ${error.message}`));
-    });
-  });
-};
+    ];
+
+    // try each client for probing + download
+    for (const client of clientStrategies) {
+      try {
+        logger.info(`Probing formats via ${client.name}...`);
+
+        const probeInfo = await probeVideoInfo(videoUrl, {
+          ...(client.base || {}),
+          ...(client.extractorArgs ? { extractorArgs: client.extractorArgs } : {})
+        });
+
+        const { formats = [], title } = probeInfo || {};
+        if (!formats || !Array.isArray(formats) || formats.length === 0) {
+          throw new Error('No formats found during probe');
+        }
+
+        const selection = pick1080PolicyFormats(formats);
+        logger.info(
+          `🎯 Format decision via ${client.name}: ${selection.summary} ` +
+          `(target ${selection.targetHeight}p, note=${selection.note}, recode=${selection.requiresRecode})`
+        );
+
+        // Build final download options
+        const dlOpts = {
+          ...(client.base || {}),
+          ...(client.extractorArgs ? { extractorArgs: client.extractorArgs } : {}),
+          format: selection.format,
+          // We want a final .mp4 on disk for caching consistency
+          output: outputTemplate,
+          mergeOutputFormat: 'mp4',
+          addMetadata: true,
+          writeThumbnail: false,
+          embedThumbnail: false,
+          // force sorting to prefer 1080 when our format expression has branches
+          formatSort: ['res:1080', 'fps', 'vcodec:avc1', 'acodec:m4a', 'ext:mp4'],
+          formatSortForce: true,
+          noPlaylist: true,
+          retries: Math.max(10, (client.base?.retries || 0)),
+          fragmentRetries: 15,
+          continue: true,
+          noAbortOnUnavailableFragment: true,
+          verbose: !!options.verbose
+        };
+
+        // If our chosen pair/progressive isn’t mp4-friendly, explicitly recode to mp4
+        if (selection.requiresRecode) {
+          dlOpts.recodeVideo = 'mp4'; // may be slower but guarantees .mp4
+        }
+
+        logger.info(`Downloading via ${client.name}...`);
+        await ytdlp(videoUrl, dlOpts);
+
+        // Verify final .mp4
+        if (fs.existsSync(finalMp4Path) && isValidVideoFile(finalMp4Path)) {
+          const fileUrl = `file:///${finalMp4Path.replace(/\\/g, '/')}`;
+          logger.info(`✅ ${client.name} successful:`, { videoId, title, path: finalMp4Path });
+          return { url: fileUrl };
+        }
+
+        // Sometimes yt-dlp writes a non-mp4 (e.g., .mkv) when recoding fails; try to normalize
+        const altFiles = fs.readdirSync(videosDir).filter(f => f.startsWith(`${videoId}.`));
+        const alt = altFiles.find(f => f !== `${videoId}.mp4`);
+        if (alt && fs.existsSync(path.join(videosDir, alt)) && isValidVideoFile(path.join(videosDir, alt))) {
+          // last-ditch: try to rename if it actually is mp4 in disguise (rare)
+          if (alt.endsWith('.mp4')) {
+            fs.renameSync(path.join(videosDir, alt), finalMp4Path);
+            const fileUrl = `file:///${finalMp4Path.replace(/\\/g, '/')}`;
+            logger.info(`ℹ️ Normalized alt file to mp4 for: ${videoId}`);
+            return { url: fileUrl };
+          }
+        }
+
+        throw new Error('Download did not produce a valid .mp4');
+      } catch (err) {
+        logger.warn(`❌ ${client.name} failed:`, err?.message || String(err));
+        // Clean partials for next attempt
+        try {
+          const partials = fs.readdirSync(videosDir).filter(f => f.startsWith(`${videoId}.`));
+          for (const f of partials) {
+            try { fs.unlinkSync(path.join(videosDir, f)); } catch {}
+          }
+        } catch {}
+        // try next client…
+      }
+    }
+
+    throw new Error('All strategies failed under 1080p policy');
+
+  } catch (error) {
+    logger.error('Download failed for', videoId, ':', error.message);
+    const msg = error.message.toLowerCase();
+    if (msg.includes('all strategies failed')) {
+      throw new Error('Unable to bypass restrictions - video may be genuinely restricted');
+    } else if (msg.includes('unavailable')) {
+      throw new Error('Video is unavailable or has been removed');
+    } else if (msg.includes('private')) {
+      throw new Error('This video is private and cannot be downloaded');
+    } else {
+      throw new Error(`Download failed: ${error.message}`);
+    }
+  }
+}
 
 // Menu creation
 function createMenuTemplate() {
@@ -643,28 +386,27 @@ function createMenuTemplate() {
     {
       label: 'Tools',
       submenu: [
-        // yt-dlp Testing
         {
           label: 'Test yt-dlp',
           click: async () => {
-            if (!ytDlpPath) {
+            try {
+              // Test with a simple version check
+              await ytdlp('--version');
               dialog.showMessageBox(mainWindow, {
-                type: 'error',
-                title: 'yt-dlp Not Found',
-                message: 'yt-dlp binary is not initialized',
+                type: 'info',
+                title: 'yt-dlp Test Result',
+                message: 'yt-dlp is working correctly',
                 buttons: ['OK']
               });
-              return;
+            } catch (error) {
+              dialog.showMessageBox(mainWindow, {
+                type: 'error',
+                title: 'yt-dlp Test Failed',
+                message: 'yt-dlp is not working properly',
+                detail: error.message,
+                buttons: ['OK']
+              });
             }
-            
-            const result = await testYtDlp();
-            dialog.showMessageBox(mainWindow, {
-              type: result.success ? 'info' : 'warning',
-              title: 'yt-dlp Test Result',
-              message: result.success ? 'yt-dlp is working correctly' : 'yt-dlp test failed',
-              detail: result.error || result.version || 'Binary is ready',
-              buttons: ['OK']
-            });
           }
         },
         {
@@ -680,17 +422,15 @@ function createMenuTemplate() {
             });
             
             if (result.response === 0) {
-              // Use a short, reliable test video
               const testVideoId = 'jNQXAC9IVRw'; // "Me at the zoo" - first YouTube video, very short
               
               try {
                 mainWindow.webContents.send('show-loading', { message: 'Testing download...' });
                 
-                const downloadResult = await executeDownload(
-                  testVideoId, 
-                  path.join(videosDir, `test_${testVideoId}.mp4`), 
-                  { verbose: true }
-                );
+                const downloadResult = await downloadVideo(testVideoId, { 
+                  verbose: true, 
+                  enhancedQuality: true 
+                });
                 
                 mainWindow.webContents.send('hide-loading');
                 
@@ -698,12 +438,11 @@ function createMenuTemplate() {
                   type: 'info',
                   title: 'Download Test Success',
                   message: 'Test download completed successfully!',
-                  detail: `Video downloaded and ready to play.\nCheck the console for detailed logs.`,
+                  detail: `Video downloaded and ready to play.`,
                   buttons: ['OK', 'Play Video']
                 }).then((result) => {
                   if (result.response === 1) {
-                    // Try to play the video
-                    shell.openPath(path.join(videosDir, `test_${testVideoId}.mp4`));
+                    shell.openPath(path.join(videosDir, `${testVideoId}.mp4`));
                   }
                 });
               } catch (error) {
@@ -713,7 +452,7 @@ function createMenuTemplate() {
                   type: 'error', 
                   title: 'Download Test Failed',
                   message: 'Test download failed',
-                  detail: `Error: ${error.message}\n\nCheck the console for detailed error logs.`,
+                  detail: `Error: ${error.message}`,
                   buttons: ['OK']
                 });
               }
@@ -723,150 +462,6 @@ function createMenuTemplate() {
         {
           type: 'separator'
         },
-        // PO Token Plugin Management
-        {
-          label: 'PO Token Plugin',
-          submenu: [
-            {
-              label: 'PO Token Status',
-              click: async () => {
-                const status = await checkPOTokenPluginStatus();
-                
-                dialog.showMessageBox(mainWindow, {
-                  type: status.installed ? 'info' : 'warning',
-                  title: 'PO Token Status',
-                  message: status.installed ? 'Automatic PO Token Support Active!' : 'PO Token support not available',
-                  detail: `
-            Plugin: ${status.installed ? '✅ INSTALLED' : '❌ MISSING'}
-            Type: ${status.embedded ? 'Embedded (Automatic)' : 'External'}
-            Server: ${status.serverRunning ? '✅ RUNNING' : '⚠️  Plugin-based'}
-            Location: ${status.path || 'N/A'}
-
-            ${status.automatic ? 
-              '🎉 Users get enhanced YouTube access automatically!\nNo setup, no configuration, no external dependencies!' : 
-              'Plugin missing. This should not happen in distribution builds.'}
-                  `.trim(),
-                  buttons: ['OK']
-                });
-              }
-            },
-            {
-              label: 'Reinstall Plugin',
-              click: async () => {
-                const result = await dialog.showMessageBox(mainWindow, {
-                  type: 'question',
-                  title: 'Reinstall Plugin',
-                  message: 'Reinstall the PO Token plugin?',
-                  detail: 'This will remove the existing plugin and create a fresh installation.',
-                  buttons: ['Reinstall', 'Cancel'],
-                  defaultId: 0
-                });
-                
-                if (result.response === 0) {
-                  try {
-                    // Remove existing plugin completely
-                    const pluginPath = path.join(pluginsDir, 'bgutil_ytdlp_pot_provider');
-                    if (fs.existsSync(pluginPath)) {
-                      fs.rmSync(pluginPath, { recursive: true, force: true });
-                      logger.info('Removed existing plugin');
-                    }
-                    
-                    // Clear the entire plugins directory and recreate
-                    if (fs.existsSync(pluginsDir)) {
-                      fs.rmSync(pluginsDir, { recursive: true, force: true });
-                    }
-                    fs.mkdirSync(pluginsDir, { recursive: true });
-                    
-                    // Wait a moment for filesystem operations to complete
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    
-                    // Reinstall with the fixed version
-                    await createBundledPlugin(pluginPath);
-                    
-                    // Test the plugin
-                    const pluginTest = await testYtDlpWithPlugin();
-                    const status = await checkPOTokenPluginStatus();
-                    
-                    dialog.showMessageBox(mainWindow, {
-                      type: pluginTest.pluginLoaded ? 'info' : 'warning',
-                      title: 'Plugin Reinstalled',
-                      message: pluginTest.pluginLoaded ? 'Plugin installed and detected!' : 'Plugin installed but not detected',
-                      detail: `
-            Installation: SUCCESS
-            Files Created: ${status.installed ? 'YES' : 'NO'}
-            Plugin Loaded by yt-dlp: ${pluginTest.pluginLoaded ? 'YES' : 'NO'}
-            Location: ${pluginPath}
-
-            ${pluginTest.pluginLoaded ? 
-              'The plugin is now working and should provide better video quality.' : 
-              'Plugin installed but yt-dlp is not detecting it. Check the console for details.'}
-                      `.trim(),
-                      buttons: ['OK']
-                    });
-                  } catch (error) {
-                    dialog.showMessageBox(mainWindow, {
-                      type: 'error',
-                      title: 'Reinstallation Failed',
-                      message: 'Failed to reinstall plugin',
-                      detail: `Error: ${error.message}\n\nTry restarting the application.`,
-                      buttons: ['OK']
-                    });
-                  }
-                }
-              }
-            },
-            {
-              label: 'Debug Plugin System',
-              click: async () => {
-                // Run debug function
-                debugPluginDirectory();
-                
-                // Get detailed status
-                const status = await checkPOTokenPluginStatus();
-                let pluginFilesList = 'Unknown';
-                
-                try {
-                  const pluginPath = path.join(pluginsDir, 'bgutil_ytdlp_pot_provider');
-                  if (fs.existsSync(pluginPath)) {
-                    const files = fs.readdirSync(pluginPath);
-                    pluginFilesList = files.join(', ');
-                  } else {
-                    pluginFilesList = 'Directory not found';
-                  }
-                } catch (error) {
-                  pluginFilesList = `Error: ${error.message}`;
-                }
-                
-                dialog.showMessageBox(mainWindow, {
-                  type: 'info',
-                  title: 'Plugin Debug Information',
-                  message: 'Plugin System Debug Results',
-                  detail: `
-    Plugin Directory: ${pluginsDir}
-    Directory Exists: ${fs.existsSync(pluginsDir) ? 'YES' : 'NO'}
-    Plugin Installed: ${status.installed ? 'YES' : 'NO'}
-    Plugin Files: ${pluginFilesList}
-
-    Detailed information has been logged to the console.
-    Check the console for complete debug output.
-                  `.trim(),
-                  buttons: ['OK', 'Open Plugin Folder']
-                }).then((result) => {
-                  if (result.response === 1) {
-                    if (!fs.existsSync(pluginsDir)) {
-                      fs.mkdirSync(pluginsDir, { recursive: true });
-                    }
-                    shell.openPath(pluginsDir);
-                  }
-                });
-              }
-            }
-          ]
-        },
-        {
-          type: 'separator'
-        },
-        // File Management
         {
           label: 'Open Videos Folder',
           click: () => {
@@ -876,19 +471,6 @@ function createMenuTemplate() {
             shell.openPath(videosDir);
           }
         },
-        {
-          label: 'Open Plugins Folder',
-          click: () => {
-            if (!fs.existsSync(pluginsDir)) {
-              fs.mkdirSync(pluginsDir, { recursive: true });
-            }
-            shell.openPath(pluginsDir);
-          }
-        },
-        {
-          type: 'separator'
-        },
-        // Maintenance
         {
           label: 'Cleanup Videos',
           click: async () => {
@@ -905,7 +487,6 @@ function createMenuTemplate() {
               try {
                 cleanupOldVideos();
                 
-                // Get count of remaining files
                 const remaining = fs.existsSync(videosDir) ? 
                   fs.readdirSync(videosDir).filter(f => f.endsWith('.mp4')).length : 0;
                 
@@ -929,6 +510,22 @@ function createMenuTemplate() {
           }
         },
         {
+          label: 'Reset All Data',
+          click: async () => {
+            const userDataPath = app.getPath('userData');
+            // Clear contents but keep directory
+            fs.rmSync(userDataPath, { recursive: true, force: true });
+            app.relaunch();
+            app.exit();
+          }
+        }
+      ]
+    },
+    {
+      label: 'Help',
+      submenu: [
+
+        {
           label: 'System Information',
           click: () => {
             const health = getDiskSpace();
@@ -942,27 +539,21 @@ function createMenuTemplate() {
               title: 'System Information',
               message: 'Stepwise Studio System Info',
               detail: `
-    App Version: ${app.getVersion()}
-    Platform: ${platform} (${arch})
-    Node.js: ${nodeVersion}
-    Electron: ${electronVersion}
+App Version: ${app.getVersion()}
+Platform: ${platform} (${arch})
+Node.js: ${nodeVersion}
+Electron: ${electronVersion}
 
-    Videos Directory: ${videosDir}
-    Cached Videos: ${health.videoFiles || 0}
-    Total Files: ${health.fileCount || 0}
+Videos Directory: ${videosDir}
+Cached Videos: ${health.videoFiles || 0}
+Total Files: ${health.fileCount || 0}
 
-    yt-dlp: ${ytDlpPath ? 'Available' : 'Not Found'}
-    Plugins: ${fs.existsSync(pluginsDir) ? 'Directory Ready' : 'Not Setup'}
+yt-dlp: Available via yt-dlp-exec
               `.trim(),
               buttons: ['OK']
             });
           }
-        }
-      ]
-    },
-    {
-      label: 'Help',
-      submenu: [
+        },
         {
           label: 'About Stepwise Studio',
           click: () => {
@@ -1125,28 +716,15 @@ function createWindow() {
 }
 
 // IPC Handlers
-ipcMain.handle('download-video', async (event, videoId) => {
+ipcMain.handle('download-video', async (event, videoId, enhancedQuality = true) => {
   try {
     if (!videoId?.trim()) throw new Error('Video ID is required');
-    if (!ytDlpPath) throw new Error('yt-dlp not available');
-    if (!fs.existsSync(ytDlpPath)) throw new Error(`yt-dlp binary does not exist at: ${ytDlpPath}`);
 
-    const outputPath = path.join(videosDir, `${videoId}.mp4`);
-    
-    // Check if video already exists
-    if (fs.existsSync(outputPath)) {
-      const stats = fs.statSync(outputPath);
-      if (stats.size > 1024) {
-        const fileUrl = `file:///${outputPath.replace(/\\/g, '/')}`;
-        logger.info('Video already cached:', videoId);
-        return { url: fileUrl };
-      } else {
-        fs.unlinkSync(outputPath);
-      }
-    }
-
-    logger.info('Starting video download:', videoId);
-    return await executeDownload(videoId, outputPath, { verbose: true });
+    logger.info('Download request for:', videoId);
+    return await downloadVideo(videoId, { 
+      verbose: true, 
+      enhancedQuality 
+    });
 
   } catch (error) {
     logger.error('Download failed:', error.message);
@@ -1161,8 +739,8 @@ ipcMain.handle('youtube-search', async (event, query) => {
     const response = await axios.get('https://www.googleapis.com/youtube/v3/search', {
       params: {
         part: 'snippet', type: 'video', maxResults: 12,
-        q: query.trim() + ' dance tutorial',
-        key: 'AIzaSyCnYR4E6pNBl-oHscWZOE_akXbmOtT7FfI',
+        q: query.trim() + ' dance',
+        key: process.env.YT_API_KEY || 'AIzaSyDm4UJfp6WtooikGqBXIROuvTwce6v5aY0',
         safeSearch: 'strict'
       },
       timeout: 10000
@@ -1185,17 +763,17 @@ ipcMain.handle('youtube-search', async (event, query) => {
   }
 });
 
-ipcMain.handle('check-po-token-plugin', async () => {
-  return await checkPOTokenPluginStatus();
-});
-
 // Additional IPC handlers
 const ipcHandlers = {
   'get-app-version': () => app.getVersion(),
   'show-message-box': async (event, options) => await dialog.showMessageBox(mainWindow, options),
   'get-health': () => ({
-    status: 'healthy', timestamp: new Date().toISOString(), videosDir: fs.existsSync(videosDir),
-    diskSpace: getDiskSpace(), ytDlpReady: !!ytDlpPath, platform: process.platform
+    status: 'healthy', 
+    timestamp: new Date().toISOString(), 
+    videosDir: fs.existsSync(videosDir),
+    diskSpace: getDiskSpace(), 
+    ytDlpReady: true, // Always true with yt-dlp-exec
+    platform: process.platform
   }),
   'cleanup-videos': () => { cleanupOldVideos(); return { success: true }; },
   'get-video-list': () => {
@@ -1205,27 +783,15 @@ const ipcHandlers = {
         .map(file => {
           const filePath = path.join(videosDir, file);
           const stats = fs.statSync(filePath);
-          return { id: path.basename(file, '.mp4'), filename: file, size: stats.size, created: stats.birthtime };
+          return { 
+            id: path.basename(file, '.mp4'), 
+            filename: file, 
+            size: stats.size, 
+            created: stats.birthtime 
+          };
         });
     } catch (err) {
       return [];
-    }
-  },
-  'test-ytdlp': async () => {
-    try {
-      if (!ytDlpPath) return { ready: false, error: 'yt-dlp not initialized' };
-      const result = await testYtDlp();
-      return { ready: result.success, path: ytDlpPath, error: result.error, version: result.version };
-    } catch (error) {
-      return { ready: false, error: error.message };
-    }
-  },
-  'reinitialize-ytdlp': async () => {
-    try {
-      const success = await initializeYtDlp();
-      return { success, path: ytDlpPath };
-    } catch (error) {
-      return { success: false, error: error.message };
     }
   },
   'get-preferences': () => preferencesManager.loadPreferences(),
@@ -1255,33 +821,21 @@ ipcMain.handle('save-session-data', (event, data) => {
   return true;
 });
 
-// App event handlers
+// App lifecycle
 app.whenReady().then(async () => {
   try {
-    logger.info('Starting Stepwise Studio with embedded bgutil...');
+    logger.info('🚀 Starting Stepwise Studio...');
     
     createWindow();
     createMenu();
     
-    // Don't await these - let them run in background while UI loads
-    setupPluginsDirectory().then(() => {
-      logger.info('✅ Plugin setup complete');
-    }).catch(err => {
-      logger.warn('Plugin setup failed:', err.message);
-    });
+    logger.info('🚀 Stepwise Studio ready with yt-dlp-exec');
     
-    initializeYtDlp().then(() => {
-      logger.info('✅ yt-dlp initialized');
-    }).catch(err => {
-      logger.warn('yt-dlp initialization failed:', err.message);
-    });
-    
-    logger.info('🎉 Stepwise Studio window ready!');
   } catch (err) {
     logger.error('Failed to start application:', err);
     dialog.showErrorBox('Startup Error', `Failed to start Stepwise Studio: ${err.message}`);
   }
-});
+}); 
 
 app.on('window-all-closed', () => {
   if (!isMac) app.quit();
@@ -1296,11 +850,6 @@ app.on('before-quit', () => {
     windowStateManager.saveState(mainWindow);
     mainWindow.webContents.send('app-closing');
   }
-  
-  // Stop embedded server
-  if (embeddedBgutilServer) {
-    embeddedBgutilServer.stop();
-  }
 });
 
 // Error handling
@@ -1313,13 +862,3 @@ process.on('uncaughtException', (error) => {
 
 logger.info('Videos directory:', videosDir);
 logger.info('Stepwise Studio main process loaded');
-
-// Export the functions for use in your main app
-module.exports = {
-  setupPluginsDirectory,
-  setupBundledPlugin,
-  getYtDlpArgs,
-  testYtDlpWithPlugin,
-  checkPOTokenPluginStatus,
-  checkBgutilAvailability
-};
