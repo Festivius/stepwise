@@ -45,3 +45,5 @@ dev-plugins/
 # But keep the download script
 !scripts/download-plugin.js
 */
+# Local-deploy helper (keeps the installed /Applications app in sync)
+!deploy-local.sh
