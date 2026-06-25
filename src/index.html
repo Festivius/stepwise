@@ -1737,14 +1737,50 @@
         }
         .theme-toggle:hover { background: #f0ece4; transform: scale(1.08); }
 
-        /* Dark mode via luminance inversion; media is re-inverted so it looks normal.
-           Reliable across the app's hardcoded palette without rewriting every color. */
-        body.dark-theme { filter: invert(1) hue-rotate(180deg); }
-        body.dark-theme img,
-        body.dark-theme video,
-        body.dark-theme .saved-thumb,
-        body.dark-theme .skeleton-card,
-        body.dark-theme #shortcutOverlay { filter: invert(1) hue-rotate(180deg); }
+        /* Make the library taller (override the later duplicate .saved-videos-container defs). */
+        .saved-section .saved-videos-container { min-height: 480px !important; max-height: 70vh; }
+
+        /* ---- Dark theme (soft charcoal, not pure black) ---- */
+        body.dark-theme { background: #1c1f24 !important; color: #e7e7e2; }
+        body.dark-theme .container,
+        body.dark-theme .header { background: transparent !important; }
+        /* Surfaces */
+        body.dark-theme .search-section,
+        body.dark-theme .player-section,
+        body.dark-theme .saved-section,
+        body.dark-theme .bookmarks-section,
+        body.dark-theme .saved-video,
+        body.dark-theme .video-item,
+        body.dark-theme .bookmark-item,
+        body.dark-theme .saved-videos-container,
+        body.dark-theme .bookmarks-container {
+          background: #262a30 !important;
+          border-color: #3a3f47 !important;
+          color: #e7e7e2 !important;
+        }
+        /* Inputs */
+        body.dark-theme input,
+        body.dark-theme .search-container input,
+        body.dark-theme .library-filter,
+        body.dark-theme .bookmark-title,
+        body.dark-theme .section-note {
+          background: #1c1f24 !important;
+          border-color: #3a3f47 !important;
+          color: #e7e7e2 !important;
+        }
+        body.dark-theme input::placeholder { color: #8b8f96 !important; }
+        /* Text */
+        body.dark-theme h1, body.dark-theme h2, body.dark-theme h3, body.dark-theme strong,
+        body.dark-theme .saved-title, body.dark-theme .bookmarks-title,
+        body.dark-theme .saved-video-title, body.dark-theme .bookmark-time,
+        body.dark-theme .video-item strong { color: #f1f1ec !important; }
+        body.dark-theme .tagline, body.dark-theme .footer, body.dark-theme .saved-sub,
+        body.dark-theme .empty-saved, body.dark-theme .empty-bookmarks { color: #a6abb2 !important; }
+        /* Neutral chips/tabs keep accent green for the active one */
+        body.dark-theme .library-tab { background: #333941 !important; color: #c7ccd3 !important; }
+        body.dark-theme .library-tab.active { background: #8a9b6e !important; color: #fff !important; }
+        body.dark-theme .theme-toggle,
+        body.dark-theme .coach-toggle { background: #262a30; border-color: #3a3f47; color: #b7c79a; }
 
         /* 3. Improved bookmark layout */
         .bookmarks-section {
@@ -4596,6 +4632,7 @@ body {
           font-size: .82rem; cursor: pointer; font-family: 'Poppins', sans-serif; }
         .coach-btn:hover { background: #7a8b5e; }
         .coach-btn.ghost { background: #f0ece4; color: #6b7280; }
+        .coach-tut-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 6; }
       `;
       document.head.appendChild(style);
 
@@ -4639,8 +4676,15 @@ body {
         close: panel.querySelector('#coachClose')
       };
 
+      // Skeleton overlay canvas on the TUTORIAL video (same overlay as the webcam).
+      const tutCanvas = document.createElement('canvas');
+      tutCanvas.className = 'coach-tut-canvas';
+      tutCanvas.style.display = 'none';
+      const videoContainerEl = document.querySelector('.video-container');
+      if (videoContainerEl) videoContainerEl.appendChild(tutCanvas);
+
       // ---- pose / comparison state ----
-      let camStream = null, camLandmarker = null, tutLandmarker = null, drawer = null;
+      let camStream = null, camLandmarker = null, tutLandmarker = null, drawer = null, drawer2 = null;
       let running = false, rafId = null;
       let lastScore = null, worstJoints = [];
       const setStatus = (s) => { els.status.textContent = s; };
@@ -4695,8 +4739,8 @@ body {
         };
         camLandmarker = await PoseLandmarker.createFromOptions(resolver, opts);
         tutLandmarker = await PoseLandmarker.createFromOptions(resolver, opts);
-        const ctx = els.canvas.getContext('2d');
-        drawer = new DrawingUtils(ctx);
+        drawer = new DrawingUtils(els.canvas.getContext('2d'));
+        drawer2 = new DrawingUtils(tutCanvas.getContext('2d'));
         window.__PoseLandmarker = PoseLandmarker; // for connectors
         return true;
       }
@@ -4718,8 +4762,18 @@ body {
             }
           }
           if (video && !video.paused && video.videoWidth) {
+            tutCanvas.width = video.videoWidth;
+            tutCanvas.height = video.videoHeight;
+            const tctx = tutCanvas.getContext('2d');
+            tctx.clearRect(0, 0, tutCanvas.width, tutCanvas.height);
+            // match the tutorial video's mirror state so the skeleton lines up
+            tutCanvas.style.transform = video.classList.contains('mirror-video') ? 'scaleX(-1)' : 'none';
             const r2 = tutLandmarker.detectForVideo(video, performance.now() + 1);
             tutLm = r2.landmarks && r2.landmarks[0];
+            if (tutLm && drawer2 && window.__PoseLandmarker) {
+              drawer2.drawConnectors(tutLm, window.__PoseLandmarker.POSE_CONNECTIONS, { color: '#8a9b6e', lineWidth: 3 });
+              drawer2.drawLandmarks(tutLm, { color: '#fff', radius: 2 });
+            }
           }
         } catch (e) { /* transient */ }
 
@@ -4745,6 +4799,7 @@ body {
           await els.cam.play().catch(() => {});
           await ensureModels();
           running = true;
+          tutCanvas.style.display = 'block';
           els.start.innerHTML = '<i class="fas fa-stop"></i> Stop camera';
           setStatus('Comparing your pose to the tutorial…');
           loop();
@@ -4759,6 +4814,9 @@ body {
         if (rafId) cancelAnimationFrame(rafId);
         if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; }
         els.cam.srcObject = null;
+        // Clear + hide the tutorial overlay so nothing lingers when not in use.
+        try { const c = tutCanvas.getContext('2d'); c.clearRect(0, 0, tutCanvas.width, tutCanvas.height); } catch (e) {}
+        tutCanvas.style.display = 'none';
         els.start.innerHTML = '<i class="fas fa-video"></i> Start camera';
         setStatus('Camera stopped.');
       }
@@ -4786,8 +4844,13 @@ body {
       }
 
       // ---- wire UI ----
-      toggle.addEventListener('click', () => panel.classList.toggle('open'));
-      els.close.addEventListener('click', () => { panel.classList.remove('open'); });
+      // Closing the panel stops the camera so the green light goes off when not in use.
+      function closePanel() { panel.classList.remove('open'); stopCamera(); }
+      toggle.addEventListener('click', () => {
+        if (panel.classList.contains('open')) closePanel();
+        else panel.classList.add('open');
+      });
+      els.close.addEventListener('click', closePanel);
       els.start.addEventListener('click', startCamera);
       els.advice.addEventListener('click', coachMe);
       els.key.addEventListener('click', () => {
