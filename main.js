@@ -4,12 +4,13 @@ const { app, BrowserWindow, ipcMain, dialog, Menu, shell } = require('electron')
 const path = require('path');
 const fs = require('fs');
 const axios = require('axios');
-const ytdlp = require('yt-dlp-exec');
+// `ytdlp` is bound to an unpacked binary path below (see binary resolution).
 
 // Constants
 const isWindows = process.platform === 'win32';
 const isMac = process.platform === 'darwin';
 const videosDir = path.join(app.getPath('userData'), 'videos');
+const thumbnailsDir = path.join(app.getPath('userData'), 'thumbnails');
 
 // Logging utility
 const logger = {
@@ -18,12 +19,91 @@ const logger = {
   error: (msg, ...args) => console.error(`❌ ${msg}`, ...args)
 };
 
+// ---------- Binary resolution (works in dev AND packaged/asar builds) ----------
+// In a packaged app, bundled binaries are extracted to app.asar.unpacked rather than
+// living inside the (non-executable) app.asar archive.
+function toUnpacked(p) {
+  if (!p) return p;
+  const packed = `app.asar${path.sep}`;
+  if (p.includes(packed) && !p.includes('app.asar.unpacked')) {
+    return p.replace(packed, `app.asar.unpacked${path.sep}`);
+  }
+  return p;
+}
+
+// GUI apps launched from Finder/Dock inherit only a minimal PATH; add common locations
+// so a system ffmpeg/yt-dlp can still be found as a fallback.
+(function augmentPath() {
+  const extra = isMac
+    ? ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin']
+    : isWindows ? [] : ['/usr/local/bin', '/usr/bin', '/bin'];
+  const parts = (process.env.PATH || '').split(path.delimiter).filter(Boolean);
+  process.env.PATH = [...new Set([...parts, ...extra])].join(path.delimiter);
+})();
+
+// Resolve bundled ffmpeg (ffmpeg-static); null falls back to ffmpeg on PATH.
+const ffmpegPath = (() => {
+  try {
+    const p = toUnpacked(require('ffmpeg-static'));
+    if (p && fs.existsSync(p)) return p;
+  } catch {}
+  return null;
+})();
+logger.info(ffmpegPath
+  ? `Using bundled ffmpeg: ${ffmpegPath}`
+  : 'No bundled ffmpeg; relying on system ffmpeg via PATH');
+
+// Resolve the yt-dlp binary. Prefer the self-contained standalone shipped in binaries/
+// (no system Python required, and kept current); fall back to the yt-dlp-exec zipapp.
+function resolveYtDlpBinary() {
+  const standalone = isWindows ? 'yt-dlp.exe' : isMac ? 'yt-dlp-macos' : 'yt-dlp-linux';
+  const candidates = [
+    process.resourcesPath && path.join(process.resourcesPath, 'binaries', standalone), // packaged
+    path.join(__dirname, 'binaries', standalone)                                        // dev
+  ].filter(Boolean);
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  // Fallback: yt-dlp-exec's bundled binary (Python zipapp — needs system Python).
+  try {
+    const dir = path.dirname(require.resolve('yt-dlp-exec'));
+    return toUnpacked(path.join(dir, '..', 'bin', isWindows ? 'yt-dlp.exe' : 'yt-dlp'));
+  } catch {
+    return null;
+  }
+}
+
+const ytDlpBinary = resolveYtDlpBinary();
+const ytdlp = ytDlpBinary && fs.existsSync(ytDlpBinary)
+  ? require('yt-dlp-exec').create(ytDlpBinary)
+  : require('yt-dlp-exec');
+logger.info(`Using yt-dlp binary: ${ytDlpBinary || '(yt-dlp-exec default)'}`);
+
 let mainWindow;
 
 // Initialize directories
 if (!fs.existsSync(videosDir)) {
   fs.mkdirSync(videosDir, { recursive: true });
   logger.info('Created videos directory:', videosDir);
+}
+if (!fs.existsSync(thumbnailsDir)) {
+  fs.mkdirSync(thumbnailsDir, { recursive: true });
+}
+
+// Cache a video's thumbnail to disk so saved/offline lists never break on expired URLs.
+function cacheThumbnail(videoId) {
+  try {
+    const dest = path.join(thumbnailsDir, `${videoId}.jpg`);
+    if (fs.existsSync(dest)) return;
+    const url = `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`;
+    axios.get(url, { responseType: 'arraybuffer', timeout: 8000 })
+      .then(res => fs.writeFileSync(dest, Buffer.from(res.data)))
+      .catch(() => {});
+  } catch {}
+}
+function thumbnailPath(videoId) {
+  const p = path.join(thumbnailsDir, `${videoId}.jpg`);
+  return fs.existsSync(p) ? `file:///${p.replace(/\\/g, '/')}` : null;
 }
 
 // Utility functions
@@ -75,108 +155,108 @@ function getDiskSpace() {
   }
 }
 
-// ---------- Format helpers (place near other utilities) ----------
-function pick1080PolicyFormats(formats) {
-  // Keep only actual video formats with a height
-  const vfmts = formats.filter(f => f.vcodec && f.vcodec !== 'none' && Number.isFinite(f.height));
-  const afmts = formats.filter(f => f.acodec && f.acodec !== 'none' && (!f.vcodec || f.vcodec === 'none'));
-
-  if (!vfmts.length) return { format: 'best', note: 'no-video-formats', summary: 'No video formats found' };
-
-  // Determine the best height we are allowed to fetch (<=1080) and prefer exactly 1080
-  const heights = [...new Set(vfmts.map(f => f.height))].sort((a, b) => b - a);
-  const has1080 = heights.includes(1080);
-  const bestAllowedHeight = heights.find(h => h <= 1080);
-  const targetHeight = has1080 ? 1080 : (bestAllowedHeight ?? heights[0]);
-
-  // Prefer progressive mp4 at targetHeight when available (simplest path)
-  const progressiveAtTarget = vfmts
-    .filter(f => f.height === targetHeight && f.acodec && f.acodec !== 'none')
-    .sort((a, b) => {
-      // prioritize mp4 + h264/aac, then higher tbr/fps
-      const score = fmt => (
-        (fmt.ext === 'mp4' ? 3 : 0) +
-        (/avc1|h264/i.test(fmt.vcodec) ? 2 : 0) +
-        (/m4a|aac/i.test(fmt.acodec) ? 1 : 0)
-      );
-      return (score(b) - score(a)) || ((b.tbr || 0) - (a.tbr || 0)) || ((b.fps || 0) - (a.fps || 0));
-    });
-
-  if (progressiveAtTarget.length) {
-    const p = progressiveAtTarget[0];
-    return {
-      format: `${p.format_id}`,
-      targetHeight,
-      requiresRecode: p.ext !== 'mp4' || !/avc1|h264/i.test(p.vcodec) || !/m4a|aac/i.test(p.acodec),
-      note: 'progressive',
-      summary: `${p.height}p • ${p.fps || 30}fps • ${p.vcodec}+${p.acodec} • ${p.ext}`
-    };
-  }
-
-  // Otherwise, prefer video-only + audio merge at target height
-  const videoOnlyAtTarget = vfmts
-    .filter(f => f.height === targetHeight && (!f.acodec || f.acodec === 'none'))
-    .sort((a, b) => {
-      // prefer mp4 container and avc1/h264 for mp4-friendly merge
-      const score = fmt => (
-        (fmt.ext === 'mp4' ? 3 : 0) +
-        (/avc1|h264/i.test(fmt.vcodec) ? 2 : 0) +
-        ((fmt.fps || 0) >= 60 ? 1 : 0)
-      );
-      return (score(b) - score(a)) || ((b.tbr || 0) - (a.tbr || 0));
-    });
-
-  const bestAudio = afmts
-    .sort((a, b) => {
-      const score = fmt => (
-        (/m4a|aac/i.test(fmt.acodec) ? 2 : 0) + // mp4-friendly first
-        (fmt.ext === 'm4a' ? 1 : 0)
-      );
-      return (score(b) - score(a)) || ((b.abr || 0) - (a.abr || 0));
-    })[0];
-
-  if (videoOnlyAtTarget.length && bestAudio) {
-    const v = videoOnlyAtTarget[0];
-    const a = bestAudio;
-    const mp4Friendly = (v.ext === 'mp4' && /avc1|h264/i.test(v.vcodec)) && (/m4a|aac/i.test(a.acodec));
-    return {
-      format: `${v.format_id}+${a.format_id}`,
-      targetHeight,
-      requiresRecode: !mp4Friendly,
-      note: 'separate-av',
-      summary: `${v.height}p${v.fps ? ` • ${v.fps}fps` : ''} • ${v.vcodec}+${a.acodec} • ${v.ext}+${a.ext}`
-    };
-  }
-
-  // Fallback: best ≤1080 (whatever it is)
-  return {
-    format: "bv*[height=1080]+ba/b[height=1080]/bv*[height<=1080]+ba/b[height<=1080]",
-    targetHeight,
-    requiresRecode: false,
-    note: 'fallback-selector',
-    summary: `best ≤${targetHeight}p (auto)`
-  };
+function pathToFileUrl(p) {
+  return `file:///${p.replace(/\\/g, '/')}`;
 }
 
-async function probeVideoInfo(videoUrl, baseOptions = {}) {
-  const result = await ytdlp(videoUrl, {
-    ...baseOptions,
-    dumpSingleJson: true,
-    noPlaylist: true,
-    simulate: true,
-    skipDownload: true,
-    noWarnings: true,
-    quiet: true
-  });
+// Read a downloaded video's title from its yt-dlp .info.json sidecar (if present).
+function readVideoTitle(videoId) {
+  try {
+    const p = path.join(videosDir, `${videoId}.info.json`);
+    if (fs.existsSync(p)) {
+      const j = JSON.parse(fs.readFileSync(p, 'utf8'));
+      return j.title || null;
+    }
+  } catch {}
+  return null;
+}
 
-  // yt-dlp-exec may already parse JSON for us
-  if (typeof result === 'string' || Buffer.isBuffer(result)) {
-    return JSON.parse(String(result));
-  } else if (typeof result === 'object' && result !== null) {
-    return result; // already parsed
-  } else {
-    throw new Error('Unexpected yt-dlp probe output type: ' + typeof result);
+function cleanPartials(videoId) {
+  try {
+    fs.readdirSync(videosDir)
+      .filter(f => f.startsWith(`${videoId}.`))
+      .forEach(f => { try { fs.unlinkSync(path.join(videosDir, f)); } catch {} });
+  } catch {}
+}
+
+// Lossless container remux to .mp4 (stream copy, no re-encode).
+function remuxToMp4(src, dest) {
+  if (!ffmpegPath) return false;
+  try {
+    require('child_process').execFileSync(
+      ffmpegPath,
+      ['-y', '-i', src, '-c', 'copy', '-movflags', '+faststart', dest],
+      { stdio: 'ignore' }
+    );
+    return fs.existsSync(dest) && isValidVideoFile(dest);
+  } catch {
+    return false;
   }
+}
+
+// Return a valid .mp4 path for this video, normalizing any other container if needed.
+function ensureMp4(videoId) {
+  const finalMp4Path = path.join(videosDir, `${videoId}.mp4`);
+  if (fs.existsSync(finalMp4Path) && isValidVideoFile(finalMp4Path)) return finalMp4Path;
+
+  const alts = fs.readdirSync(videosDir)
+    .filter(f => f.startsWith(`${videoId}.`) && isValidVideoFile(path.join(videosDir, f)));
+  if (!alts.length) return null;
+
+  const altPath = path.join(videosDir, alts[0]);
+  if (altPath.endsWith('.mp4')) {
+    if (altPath !== finalMp4Path) fs.renameSync(altPath, finalMp4Path);
+    return finalMp4Path;
+  }
+  if (remuxToMp4(altPath, finalMp4Path)) {
+    try { fs.unlinkSync(altPath); } catch {}
+    return finalMp4Path;
+  }
+  return altPath; // best effort (Chromium can usually still play it)
+}
+
+// Browser to pull cookies from for higher-quality, PO-token-gated formats.
+// Reads the user preference (configurable via Tools ▸ Video Quality); 'chrome' by default.
+function getCookieBrowser() {
+  try {
+    const v = preferencesManager.loadPreferences().cookieBrowser;
+    if (typeof v === 'string' && v.trim()) return v.trim().toLowerCase();
+  } catch {}
+  return 'chrome';
+}
+
+// Build the ordered list of download strategies. When a cookie browser is configured,
+// a cookie-authenticated attempt is tried first (it unlocks 1080p that is otherwise
+// gated behind PO tokens); plain attempts always follow as a guaranteed fallback.
+// NOTE: never inject a custom web User-Agent — that forces the PO-token-gated web
+// client and silently downgrades to a 360p progressive stream.
+function buildClientStrategies(cookieBrowser) {
+  const strategies = [];
+  if (cookieBrowser && cookieBrowser !== 'none') {
+    strategies.push({
+      name: `Cookies (${cookieBrowser}) + auto clients`,
+      base: { cookiesFromBrowser: cookieBrowser, geoBypass: true, noPlaylist: true, retries: 3, fragmentRetries: 5 },
+      extractorArgs: 'youtube:player_client=default,web_safari,mweb,tv'
+    });
+  }
+  strategies.push(
+    {
+      name: 'Default (auto clients)',
+      base: { geoBypass: true, noPlaylist: true, retries: 3, fragmentRetries: 5, socketTimeout: 60 },
+      extractorArgs: null
+    },
+    {
+      name: 'Explicit multi-client',
+      base: { geoBypass: true, noPlaylist: true, retries: 3, fragmentRetries: 5 },
+      extractorArgs: 'youtube:player_client=default,android,ios,web_safari,tv'
+    },
+    {
+      name: 'TV/MWeb fallback',
+      base: { geoBypass: true, noPlaylist: true, retries: 2 },
+      extractorArgs: 'youtube:player_client=tv,mweb'
+    }
+  );
+  return strategies;
 }
 
 // ---------- Enforced 1080p-or-lower downloader ----------
@@ -190,150 +270,95 @@ async function downloadVideo(videoId, options = {}) {
     if (fs.existsSync(finalMp4Path) && isValidVideoFile(finalMp4Path)) {
       const fileUrl = `file:///${finalMp4Path.replace(/\\/g, '/')}`;
       logger.info('Video already cached:', videoId);
-      return { url: fileUrl };
+      cacheThumbnail(videoId);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('download-progress', { videoId, percent: 100 });
+      }
+      return { url: fileUrl, title: readVideoTitle(videoId), thumb: thumbnailPath(videoId) };
     }
 
-    logger.info('Starting video download with 1080p policy:', videoId);
+    // Max resolution from preferences (user-selectable: 1080 / 720 / 480).
+    let maxH = 1080;
+    try { maxH = parseInt(preferencesManager.loadPreferences().maxHeight, 10) || 1080; } catch {}
+    logger.info(`Starting video download (≤${maxH}p):`, videoId);
 
-    // Client strategies reused for both probing and download
-    const clientStrategies = [
-      {
-        name: "Fresh Session (Web-like)",
-        base: {
-          addHeader: [
-            'User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
-            'Accept-Language:en-US,en;q=0.9'
-          ],
-          geoBypass: true,
-          noPlaylist: true,
-          retries: 10,
-          fragmentRetries: 15,
-          socketTimeout: 120
-        },
-        extractorArgs: null
-      },
-      {
-        name: "Android Client",
-        base: {
-          addHeader: ['User-Agent:com.google.android.youtube/17.31.35 (Linux; U; Android 11) gzip'],
-          geoBypass: true,
-          noPlaylist: true,
-          retries: 10
-        },
-        extractorArgs: 'youtube:player_client=android'
-      },
-      {
-        name: "TV Client",
-        base: {
-          addHeader: ['User-Agent:Mozilla/5.0 (ChromiumStylePlatform) Cobalt/40.13031.0'],
-          geoBypass: true,
-          noPlaylist: true,
-          retries: 10
-        },
-        extractorArgs: 'youtube:player_client=tv_embedded'
-      },
-      {
-        name: "Web Client (explicit)",
-        base: {
-          addHeader: [
-            'User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Accept-Language:en-US,en;q=0.9',
-            'Sec-Fetch-Mode:navigate'
-          ],
-          geoBypass: true,
-          noPlaylist: true,
-          retries: 15
-        },
-        extractorArgs: 'youtube:player_client=web'
-      }
-    ];
+    const clientStrategies = buildClientStrategies(getCookieBrowser());
 
-    // try each client for probing + download
+    // Select by RESOLUTION only (cap at maxH); never hard-gate on codec here, or a video
+    // whose top resolution is AV1/VP9-only would silently fall back to a low-res H.264 stream.
+    // Codec/container preferences are expressed as SOFT tiebreakers via FORMAT_SORT, so we
+    // get the highest allowed resolution and prefer H.264+AAC+mp4 (fast lossless mux).
+    const FORMAT = [
+      `bv*[height<=${maxH}]+ba`,
+      `b[height<=${maxH}]`,
+      'bv*+ba/b'
+    ].join('/');
+    // Must be a single comma-joined string: yt-dlp does NOT accumulate repeated
+    // --format-sort flags (the last one would override), and yt-dlp-exec renders a
+    // JS array as multiple flags — which silently collapsed sorting to "ext:mp4" only.
+    const FORMAT_SORT = `res:${maxH},fps,vcodec:h264,vcodec:vp9,acodec:m4a,ext:mp4`;
+
+    // Try each client in a single pass (download + merge directly — no separate probe).
     for (const client of clientStrategies) {
       try {
-        logger.info(`Probing formats via ${client.name}...`);
+        logger.info(`Downloading via ${client.name}...`);
 
-        const probeInfo = await probeVideoInfo(videoUrl, {
-          ...(client.base || {}),
-          ...(client.extractorArgs ? { extractorArgs: client.extractorArgs } : {})
-        });
-
-        const { formats = [], title } = probeInfo || {};
-        if (!formats || !Array.isArray(formats) || formats.length === 0) {
-          throw new Error('No formats found during probe');
-        }
-
-        const selection = pick1080PolicyFormats(formats);
-        logger.info(
-          `🎯 Format decision via ${client.name}: ${selection.summary} ` +
-          `(target ${selection.targetHeight}p, note=${selection.note}, recode=${selection.requiresRecode})`
-        );
-
-        // Build final download options
         const dlOpts = {
           ...(client.base || {}),
           ...(client.extractorArgs ? { extractorArgs: client.extractorArgs } : {}),
-          format: selection.format,
-          // We want a final .mp4 on disk for caching consistency
+          format: FORMAT,
+          formatSort: FORMAT_SORT,
+          formatSortForce: true,
           output: outputTemplate,
           mergeOutputFormat: 'mp4',
+          ...(ffmpegPath ? { ffmpegLocation: ffmpegPath } : {}),
           addMetadata: true,
-          writeThumbnail: false,
-          embedThumbnail: false,
-          // force sorting to prefer 1080 when our format expression has branches
-          formatSort: ['res:1080', 'fps', 'vcodec:avc1', 'acodec:m4a', 'ext:mp4'],
-          formatSortForce: true,
+          writeInfoJson: true,   // gives us the title (for paste-URL + offline library)
+          newline: true,         // one progress line per update → easy to parse
           noPlaylist: true,
-          retries: Math.max(10, (client.base?.retries || 0)),
-          fragmentRetries: 15,
+          // retries/fragmentRetries come from the per-strategy base (kept low for fast failover)
           continue: true,
           noAbortOnUnavailableFragment: true,
+          noWarnings: true,
           verbose: !!options.verbose
         };
 
-        // If our chosen pair/progressive isn’t mp4-friendly, explicitly recode to mp4
-        if (selection.requiresRecode) {
-          dlOpts.recodeVideo = 'mp4'; // may be slower but guarantees .mp4
-        }
-
-        logger.info(`Downloading via ${client.name}...`);
-        await ytdlp(videoUrl, dlOpts);
-
-        // Verify final .mp4
-        if (fs.existsSync(finalMp4Path) && isValidVideoFile(finalMp4Path)) {
-          const fileUrl = `file:///${finalMp4Path.replace(/\\/g, '/')}`;
-          logger.info(`✅ ${client.name} successful:`, { videoId, title, path: finalMp4Path });
-          return { url: fileUrl };
-        }
-
-        // Sometimes yt-dlp writes a non-mp4 (e.g., .mkv) when recoding fails; try to normalize
-        const altFiles = fs.readdirSync(videosDir).filter(f => f.startsWith(`${videoId}.`));
-        const alt = altFiles.find(f => f !== `${videoId}.mp4`);
-        if (alt && fs.existsSync(path.join(videosDir, alt)) && isValidVideoFile(path.join(videosDir, alt))) {
-          // last-ditch: try to rename if it actually is mp4 in disguise (rare)
-          if (alt.endsWith('.mp4')) {
-            fs.renameSync(path.join(videosDir, alt), finalMp4Path);
-            const fileUrl = `file:///${finalMp4Path.replace(/\\/g, '/')}`;
-            logger.info(`ℹ️ Normalized alt file to mp4 for: ${videoId}`);
-            return { url: fileUrl };
+        // Stream real download progress to the renderer.
+        const sub = ytdlp.exec(videoUrl, dlOpts);
+        const onChunk = (buf) => {
+          const m = String(buf).match(/\[download\]\s+([\d.]+)%/g);
+          if (m && m.length) {
+            const pct = parseFloat(m[m.length - 1].match(/([\d.]+)%/)[1]);
+            if (!isNaN(pct) && mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('download-progress', { videoId, percent: pct });
+            }
           }
+        };
+        if (sub.stdout) sub.stdout.on('data', onChunk);
+        if (sub.stderr) sub.stderr.on('data', onChunk);
+        await sub;
+
+        // Verify, normalizing any non-mp4 container to .mp4 via a lossless remux.
+        const produced = ensureMp4(videoId);
+        if (produced) {
+          const title = readVideoTitle(videoId);
+          cacheThumbnail(videoId);
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('download-progress', { videoId, percent: 100 });
+          }
+          logger.info(`✅ ${client.name} successful:`, { videoId, path: produced });
+          return { url: pathToFileUrl(produced), title, thumb: thumbnailPath(videoId) };
         }
 
-        throw new Error('Download did not produce a valid .mp4');
+        throw new Error('Download did not produce a valid video file');
       } catch (err) {
         logger.warn(`❌ ${client.name} failed:`, err?.message || String(err));
-        // Clean partials for next attempt
-        try {
-          const partials = fs.readdirSync(videosDir).filter(f => f.startsWith(`${videoId}.`));
-          for (const f of partials) {
-            try { fs.unlinkSync(path.join(videosDir, f)); } catch {}
-          }
-        } catch {}
+        cleanPartials(videoId);
         // try next client…
       }
     }
 
-    throw new Error('All strategies failed under 1080p policy');
+    throw new Error('All strategies failed');
 
   } catch (error) {
     logger.error('Download failed for', videoId, ':', error.message);
@@ -461,6 +486,49 @@ function createMenuTemplate() {
         },
         {
           type: 'separator'
+        },
+        {
+          label: 'Video Quality',
+          submenu: (() => {
+            let current = 'chrome';
+            try { current = preferencesManager.loadPreferences().cookieBrowser || 'chrome'; } catch {}
+            const choices = [
+              { label: 'Higher quality — Chrome cookies', value: 'chrome' },
+              { label: 'Higher quality — Safari cookies', value: 'safari' },
+              { label: 'Higher quality — Firefox cookies', value: 'firefox' },
+              { label: 'Higher quality — Edge cookies', value: 'edge' },
+              { label: 'Higher quality — Brave cookies', value: 'brave' },
+              { type: 'separator' },
+              { label: "Don't use cookies (may cap quality)", value: 'none' }
+            ];
+            return choices.map(c => c.type === 'separator'
+              ? { type: 'separator' }
+              : {
+                  label: c.label,
+                  type: 'radio',
+                  checked: current === c.value,
+                  click: () => {
+                    preferencesManager.update({ cookieBrowser: c.value });
+                    logger.info('Cookie browser set to:', c.value);
+                  }
+                });
+          })()
+        },
+        {
+          label: 'Max Resolution',
+          submenu: (() => {
+            let cur = 1080;
+            try { cur = parseInt(preferencesManager.loadPreferences().maxHeight, 10) || 1080; } catch {}
+            return [1080, 720, 480].map(h => ({
+              label: `${h}p`,
+              type: 'radio',
+              checked: cur === h,
+              click: () => {
+                preferencesManager.update({ maxHeight: h });
+                logger.info('Max resolution set to:', h + 'p');
+              }
+            }));
+          })()
         },
         {
           label: 'Open Videos Folder',
@@ -644,7 +712,18 @@ class UserPreferencesManager {
       volume: 1, playbackRate: 1, loopMode: false, loopStartTime: 0, loopEndTime: 10,
       mirrorMode: false, lastSearchQuery: '', savedVideos: [], recentVideos: [],
       theme: 'default', lastVideoId: null, lastVideoTitle: '', lastThumbnail: '',
-      currentVideoTime: 0, totalPracticeTime: 0, sessionCount: 0, lastSessionDate: null
+      currentVideoTime: 0, totalPracticeTime: 0, sessionCount: 0, lastSessionDate: null,
+      // Per-video settings keyed by videoId: { playbackRate, loopOn, loopStartTime,
+      // loopEndTime, mirror, lastPosition, title, updatedAt }. Top-level fields above
+      // act as global defaults for never-seen videos.
+      videos: {},
+      // Gemini API key for the AI coach (optional; free tier). Empty = rule-based fallback.
+      geminiApiKey: '',
+      // Max download resolution (height). 1080 | 720 | 480. Configurable via Tools ▸ Video Quality.
+      maxHeight: 1080,
+      // Browser to pull cookies from for higher-quality (PO-token-gated) downloads.
+      // 'none' disables cookies. Configurable via Tools ▸ Video Quality.
+      cookieBrowser: 'chrome'
     };
   }
 
@@ -721,9 +800,9 @@ ipcMain.handle('download-video', async (event, videoId, enhancedQuality = true) 
     if (!videoId?.trim()) throw new Error('Video ID is required');
 
     logger.info('Download request for:', videoId);
-    return await downloadVideo(videoId, { 
-      verbose: true, 
-      enhancedQuality 
+    return await downloadVideo(videoId, {
+      verbose: process.env.NODE_ENV === 'development',
+      enhancedQuality
     });
 
   } catch (error) {
@@ -739,7 +818,7 @@ ipcMain.handle('youtube-search', async (event, query) => {
     const response = await axios.get('https://www.googleapis.com/youtube/v3/search', {
       params: {
         part: 'snippet', type: 'video', maxResults: 12,
-        q: query.trim() + ' dance',
+        q: query.trim(),
         key: process.env.YT_API_KEY || 'AIzaSyDm4UJfp6WtooikGqBXIROuvTwce6v5aY0',
         safeSearch: 'strict'
       },
@@ -776,6 +855,17 @@ const ipcHandlers = {
     platform: process.platform
   }),
   'cleanup-videos': () => { cleanupOldVideos(); return { success: true }; },
+  'delete-video': (event, videoId) => {
+    try {
+      if (!videoId) return { success: false };
+      fs.readdirSync(videosDir)
+        .filter(f => f.startsWith(`${videoId}.`))
+        .forEach(f => { try { fs.unlinkSync(path.join(videosDir, f)); } catch {} });
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  },
   'get-video-list': () => {
     try {
       return fs.readdirSync(videosDir)
@@ -783,11 +873,14 @@ const ipcHandlers = {
         .map(file => {
           const filePath = path.join(videosDir, file);
           const stats = fs.statSync(filePath);
-          return { 
-            id: path.basename(file, '.mp4'), 
-            filename: file, 
-            size: stats.size, 
-            created: stats.birthtime 
+          const id = path.basename(file, '.mp4');
+          return {
+            id,
+            filename: file,
+            size: stats.size,
+            created: stats.birthtime,
+            title: readVideoTitle(id),
+            thumb: thumbnailPath(id)
           };
         });
     } catch (err) {

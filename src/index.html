@@ -1623,25 +1623,128 @@
         /* 2. Loop handles positioning */
         .loop-handle {
         position: absolute;
-        /*top: -12px; /* Position above the progress bar */
-        width: 6px;
-        height: 30px; /* Extend beyond the progress bar */
+        width: 10px;
+        height: 34px; /* Extend beyond the progress bar */
         background: #8a9b6e;
-        border-radius: 3px;
+        border-radius: 4px;
         transform: translateX(-50%);
         cursor: ew-resize;
         z-index: 40;
-        box-shadow: 0 0 8px rgba(0, 0, 0, 0.8);
+        box-shadow: 0 0 8px rgba(0, 0, 0, 0.5);
         display: none;
         justify-content: center;
         align-items: center;
-        transition: all 0.2s;
+        /* NOTE: do not transition `left` — it makes dragging laggy/floaty */
+        transition: background 0.15s ease, box-shadow 0.15s ease;
+        touch-action: none;
         }
 
-        .loop-handle:hover {
-        width: 8px;
-        background: #7a8b5e; /* Darker desaturated green */
+        /* Enlarged invisible grab area so the thin handle is easy to grab */
+        .loop-handle::before {
+        content: '';
+        position: absolute;
+        top: -8px; bottom: -8px; left: -9px; right: -9px;
         }
+
+        .loop-handle:hover,
+        .loop-handle.dragging {
+        background: #7a8b5e; /* Darker desaturated green */
+        box-shadow: 0 0 12px rgba(122, 139, 94, 0.9);
+        }
+
+        /* Section bands on the timeline */
+        .section-band {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        height: 14px;
+        background: rgba(138, 155, 110, 0.35);
+        border: 1px solid rgba(122, 139, 94, 0.7);
+        border-radius: 4px;
+        z-index: 25;
+        cursor: pointer;
+        overflow: hidden;
+        transition: background 0.15s ease;
+        }
+        .section-band:hover { background: rgba(138, 155, 110, 0.6); }
+        .section-band-label {
+        position: absolute;
+        left: 5px; top: 50%; transform: translateY(-50%);
+        font-size: 9px; color: #3c4630; font-weight: 600;
+        white-space: nowrap; pointer-events: none;
+        font-family: 'Poppins', sans-serif;
+        }
+        .bookmark-item.section-item { border-left: 3px solid #8a9b6e; }
+        .section-note { width: 100%; margin-top: 4px; font-size: 0.72rem; border: 1px dashed #d8d1b9;
+        background: transparent; border-radius: 6px; padding: 2px 6px; color: #6b7280;
+        font-family: 'Poppins', sans-serif; outline: none; }
+        .section-note:focus { border-color: #8a9b6e; }
+        .bookmarks-header-actions { display: flex; gap: 8px; align-items: center; }
+        .save-section-btn {
+        background: #8a9b6e; color: #fff; border: none; border-radius: 14px;
+        padding: 5px 12px; font-size: 0.8rem; cursor: pointer; font-family: 'Poppins', sans-serif;
+        display: inline-flex; align-items: center; gap: 5px; transition: background 0.15s ease;
+        }
+        .save-section-btn:hover { background: #7a8b5e; }
+
+        /* Library: filter + tabs */
+        .saved-header-actions { display: flex; gap: 8px; align-items: center; }
+        .library-filter {
+        border: 2px solid #e8e2d4; background: #fff; border-radius: 16px;
+        padding: 6px 12px; font-size: 0.85rem; font-family: 'Poppins', sans-serif;
+        color: #374151; outline: none; width: 160px; transition: border-color 0.15s ease;
+        }
+        .library-filter:focus { border-color: #8a9b6e; }
+        .library-tabs { display: flex; gap: 8px; margin: 10px 0 14px; }
+        .library-tab {
+        background: #f0ece4; border: none; border-radius: 14px; padding: 6px 14px;
+        font-size: 0.85rem; cursor: pointer; color: #6b7280; font-family: 'Poppins', sans-serif;
+        display: inline-flex; align-items: center; gap: 6px; transition: all 0.15s ease;
+        }
+        .library-tab:hover { background: #e3ddcd; }
+        .library-tab.active { background: #8a9b6e; color: #fff; }
+        .saved-sub { font-size: 0.75rem; color: #8a7a6d; margin-top: 2px; }
+
+        /* Seek-bar hover preview */
+        .seek-preview {
+        position: absolute; bottom: 24px; transform: translateX(-50%);
+        background: #374151; color: #fff; font-family: monospace; font-size: 11px;
+        padding: 2px 7px; border-radius: 6px; pointer-events: none; white-space: nowrap;
+        opacity: 0; transition: opacity 0.12s ease; z-index: 60;
+        }
+        .seek-preview.visible { opacity: 1; }
+
+        /* Global button micro-interaction (specific styles still win their own transitions) */
+        button:active { transform: scale(0.95); }
+
+        /* Search result fade-in */
+        .video-item { animation: itemFade 0.35s ease both; }
+        @keyframes itemFade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Skeleton loaders */
+        .skeleton-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; width: 100%; }
+        .skeleton-card { height: 200px; border-radius: 16px;
+        background: linear-gradient(90deg, #f0ece4 25%, #f7f4ee 37%, #f0ece4 63%);
+        background-size: 400% 100%; animation: shimmerSkel 1.3s ease infinite; }
+        @keyframes shimmerSkel { from { background-position: 100% 0; } to { background-position: 0 0; } }
+
+        /* Theme toggle button */
+        .theme-toggle {
+        position: fixed; top: 14px; right: 16px; z-index: 3000;
+        width: 40px; height: 40px; border-radius: 50%; border: 2px solid #e8e2d4;
+        background: #faf8f5; color: #7a8b5e; cursor: pointer; font-size: 1rem;
+        box-shadow: 0 4px 14px rgba(138,155,110,0.25); transition: transform 0.15s ease, background 0.15s ease;
+        }
+        .theme-toggle:hover { background: #f0ece4; transform: scale(1.08); }
+
+        /* Dark mode via luminance inversion; media is re-inverted so it looks normal.
+           Reliable across the app's hardcoded palette without rewriting every color. */
+        body.dark-theme { filter: invert(1) hue-rotate(180deg); }
+        body.dark-theme img,
+        body.dark-theme video,
+        body.dark-theme .saved-thumb,
+        body.dark-theme .skeleton-card,
+        body.dark-theme #shortcutOverlay { filter: invert(1) hue-rotate(180deg); }
 
         /* 3. Improved bookmark layout */
         .bookmarks-section {
@@ -2065,7 +2168,7 @@ body {
             <div class="loop-highlight" id="loopHighlight"></div>
             
             <div class="loop-indicator" id="loopIndicator">
-              <i class="fas fa-repeat"></i> Looping: <span id="loopStartLabel">0:00</span> - <span id="loopEndLabel">0:10</span>
+              <i class="fas fa-repeat"></i> Looping: <span id="loopStartLabel">0:00</span> - <span id="loopEndLabel">0:10</span><span id="loopExtra"></span>
             </div>
             
             <div class="controls-overlay">
@@ -2083,6 +2186,7 @@ body {
                 <div class="loop-handle end" id="loopEndHandle">
                   <span class="tooltip">Loop End</span>
                 </div>
+                <div class="seek-preview" id="seekPreview">0:00</div>
               </div>
               
               <div class="controls-bar">
@@ -2178,10 +2282,15 @@ body {
       <div class="sidebar-column">
         <section class="bookmarks-section">
           <div class="bookmarks-header">
-            <h2 class="bookmarks-title">Video Bookmarks</h2>
-            <button class="clear-bookmarks" id="clearBookmarks">
-              <i class="fas fa-trash-alt clear-all-icon"></i> Clear
-            </button>
+            <h2 class="bookmarks-title">Bookmarks &amp; Sections</h2>
+            <div class="bookmarks-header-actions">
+              <button class="save-section-btn" id="saveSectionBtn" title="Save the current loop region as a named section">
+                <i class="fas fa-bookmark"></i> Section
+              </button>
+              <button class="clear-bookmarks" id="clearBookmarks">
+                <i class="fas fa-trash-alt clear-all-icon"></i> Clear
+              </button>
+            </div>
           </div>
           <div class="bookmarks-container" id="bookmarksContainer">
             <div class="empty-bookmarks">
@@ -2197,10 +2306,18 @@ body {
     <!-- Swapped: Saved Videos now below player -->
     <section class="saved-section">
       <div class="saved-header">
-        <h2 class="saved-title">Saved Videos</h2>
-        <button class="clear-saved" id="clearSaved">
-          <i class="fas fa-trash-alt clear-all-icon"></i> Clear
-        </button>
+        <h2 class="saved-title">Your Library</h2>
+        <div class="saved-header-actions">
+          <input type="text" id="libraryFilter" class="library-filter" placeholder="Filter by title…">
+          <button class="clear-saved" id="clearSaved">
+            <i class="fas fa-trash-alt clear-all-icon"></i> Clear
+          </button>
+        </div>
+      </div>
+      <div class="library-tabs">
+        <button class="library-tab active" data-tab="saved"><i class="fas fa-heart"></i> Saved</button>
+        <button class="library-tab" data-tab="recent"><i class="fas fa-clock-rotate-left"></i> Recent</button>
+        <button class="library-tab" data-tab="offline"><i class="fas fa-hdd"></i> Downloaded</button>
       </div>
       <div class="saved-videos-container" id="savedVideosContainer">
         <div class="empty-saved">
@@ -2209,13 +2326,19 @@ body {
           <p>Save videos to watch later</p>
         </div>
       </div>
+      <div class="saved-videos-container" id="recentVideosContainer" style="display:none;"></div>
+      <div class="saved-videos-container" id="offlineVideosContainer" style="display:none;"></div>
     </section>
   </div>
   
   <div class="footer">
-    <p>Stepwise Studio &copy; 2025 | Master dance moves with precision</p>
+    <p id="footerStats">Stepwise Studio &copy; 2025 | Master dance moves with precision</p>
   </div>
   
+  <button id="themeToggle" class="theme-toggle" title="Toggle dark mode (low-light practice)">
+    <i class="fas fa-moon"></i>
+  </button>
+
   <div class="save-notification" id="saveNotification">Video saved!</div>
 
   <script>
@@ -2319,6 +2442,9 @@ body {
     const saveBtn = document.getElementById('saveBtn');
     const saveIcon = document.getElementById('saveIcon');
     const savedVideosContainer = document.getElementById('savedVideosContainer');
+    const offlineVideosContainer = document.getElementById('offlineVideosContainer');
+    const recentVideosContainer = document.getElementById('recentVideosContainer');
+    const libraryFilter = document.getElementById('libraryFilter');
     const clearSavedBtn = document.getElementById('clearSaved');
     const saveNotification = document.getElementById('saveNotification');
     const bookmarkBtn = document.getElementById('bookmarkBtn');
@@ -2337,6 +2463,35 @@ body {
     const playbackProgress = document.getElementById('playbackProgress');
     const playbackThumb = document.getElementById('playbackThumb');
     const currentTimeLabel = document.getElementById('currentTimeLabel');
+
+    // Seek-bar hover preview: show the time under the cursor.
+    const seekPreview = document.getElementById('seekPreview');
+    if (progressContainer && seekPreview) {
+      progressContainer.addEventListener('mousemove', (e) => {
+        if (!video.duration) return;
+        const rect = playbackBar.getBoundingClientRect();
+        const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+        seekPreview.textContent = formatTime((x / rect.width) * video.duration);
+        seekPreview.style.left = `${x}px`;
+        seekPreview.classList.add('visible');
+      });
+      progressContainer.addEventListener('mouseleave', () => seekPreview.classList.remove('visible'));
+    }
+
+    // Dark mode toggle (persisted in prefs.theme)
+    const themeToggle = document.getElementById('themeToggle');
+    function applyTheme(theme) {
+      const dark = theme === 'dark';
+      document.body.classList.toggle('dark-theme', dark);
+      if (themeToggle) themeToggle.innerHTML = dark ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
+    }
+    if (themeToggle) {
+      themeToggle.addEventListener('click', () => {
+        const dark = !document.body.classList.contains('dark-theme');
+        applyTheme(dark ? 'dark' : 'default');
+        if (stateManager) { stateManager.state.theme = dark ? 'dark' : 'default'; stateManager.saveStateSoon(); }
+      });
+    }
     const durationLabel = document.getElementById('durationLabel');
 
     // Variables
@@ -2353,10 +2508,13 @@ body {
     let currentBookmarks = []; // Bookmarks for currently playing video
     let progressSimulation = null;
     let isVideoActuallyLoaded = false;
+    let pendingRestorePosition = 0; // per-video position to restore once metadata loads
+    let lastPositionSave = 0;       // throttle for writing lastPosition
+    let stateManager = null;        // single source of truth (assigned below)
 
     // Speed control
-    const speeds = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2];
-    let currentSpeedIndex = 3; // 1x is default
+    const speeds = [0.1, 0.25, 0.5, 0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
+    let currentSpeedIndex = speeds.indexOf(1); // 1x is default
 
     function updatePlayerHeights() {
       const playerMain = document.querySelector('.player-main');
@@ -2422,6 +2580,18 @@ body {
       }, 200);
     }
 
+    // Real download progress from the main process overrides the simulated bar.
+    let activeDownloadId = null;
+    if (window.electronAPI && window.electronAPI.onDownloadProgress) {
+      window.electronAPI.onDownloadProgress((data) => {
+        if (!data || data.videoId !== activeDownloadId) return;
+        if (progressSimulation) { clearInterval(progressSimulation); progressSimulation = null; }
+        const pct = Math.max(0, Math.min(100, data.percent || 0));
+        downloadProgress.style.width = pct + '%';
+        progressText.textContent = pct >= 100 ? 'Complete!' : Math.floor(pct) + '%';
+      });
+    }
+
     // Update save button appearance
     function updateSaveButton() {
       if (!lastVideoId) {
@@ -2470,69 +2640,91 @@ body {
       videoLoadingOverlay.classList.remove('visible');
     }
 
-    // Initialize
-    loadUserPreferences();
+    // Initialize. State (volume, per-video settings, saved videos, bookmarks) is hydrated
+    // by stateManager.initialize() once Electron prefs load; loadBookmarks() seeds from the
+    // legacy cookie so existing data migrates if Electron prefs don't have it yet.
     loadBookmarks();
     updateSavedVideos();
     renderBookmarksList();
     initializeApp(); // Start the startup loading sequence
 
     // All the utility functions
-    function saveUserPreferences() {
-      const preferences = {
-        volume: video.volume,
+    // ---- State helpers (single source of truth = Electron prefs via stateManager) ----
+    // Capture the current video's live control values into the per-video store.
+    function saveVideoState(videoId) {
+      if (!videoId || !stateManager) return;
+      if (!stateManager.state.videos) stateManager.state.videos = {};
+      const prev = stateManager.state.videos[videoId] || {};
+      stateManager.state.videos[videoId] = {
         playbackRate: video.playbackRate,
-        loopMode: isLoopMode,
+        loopOn: isLoopMode,
         loopStartTime: loopStartTime,
         loopEndTime: loopEndTime,
-        mirrorMode: video.classList.contains('mirror-video'),
-        lastSearchQuery: searchQuery.value
+        mirror: video.classList.contains('mirror-video'),
+        lastPosition: video.currentTime || 0,
+        title: lastVideoTitle || prev.title || '',
+        thumbnail: lastThumbnail || prev.thumbnail || '',
+        updatedAt: new Date().toISOString()
       };
-      setCookie('stepwisePreferences', preferences);
     }
 
-    function loadUserPreferences() {
-      const preferences = getCookie('stepwisePreferences');
-      if (preferences) {
-        if (preferences.volume !== undefined) {
-          video.volume = preferences.volume;
-          volumeSlider.value = preferences.volume;
-          updateVolumeIcon();
-        }
-        
-        if (preferences.playbackRate !== undefined) {
-          video.playbackRate = preferences.playbackRate;
-          const speedIndex = speeds.indexOf(preferences.playbackRate);
-          if (speedIndex !== -1) {
-            currentSpeedIndex = speedIndex;
-            speedBtn.textContent = `${preferences.playbackRate}x`;
-          }
-        }
-        
-        if (preferences.loopMode !== undefined) {
-          isLoopMode = preferences.loopMode;
-          if (preferences.loopStartTime !== undefined) loopStartTime = preferences.loopStartTime;
-          if (preferences.loopEndTime !== undefined) loopEndTime = preferences.loopEndTime;
-          
-          if (isLoopMode) {
-            loopBtn.classList.add('active');
-            loopRange.style.display = 'block';
-            loopStartHandle.style.display = 'flex';
-            loopEndHandle.style.display = 'flex';
-            loopIndicator.style.display = 'block';
-            loopHighlight.classList.add('active');
-          }
-        }
-        
-        if (preferences.mirrorMode) {
-          video.classList.add('mirror-video');
-          mirrorBtn.classList.add('active');
-        }
-        
-        if (preferences.lastSearchQuery) {
-          searchQuery.value = preferences.lastSearchQuery;
-        }
+    // Apply a video's remembered settings. Speed + mirror apply immediately; the loop
+    // region and resume position are finished in the loadedmetadata handler (need duration).
+    function applyVideoState(videoId) {
+      const vs = (stateManager && stateManager.state.videos && stateManager.state.videos[videoId]) || null;
+
+      // Speed (per-video, else global default)
+      const rate = (vs && vs.playbackRate) || (stateManager && stateManager.state.playbackRate) || 1;
+      video.playbackRate = rate;
+      const idx = speeds.indexOf(rate);
+      currentSpeedIndex = idx >= 0 ? idx : speeds.indexOf(1);
+      speedBtn.textContent = `${rate}x`;
+
+      // Mirror (per-video)
+      const mirror = vs ? !!vs.mirror : false;
+      video.classList.toggle('mirror-video', mirror);
+      mirrorBtn.classList.toggle('active', mirror);
+
+      // Loop intent — handles/range are shown in loadedmetadata once duration is known
+      isLoopMode = vs ? !!vs.loopOn : false;
+      loopBtn.classList.toggle('active', isLoopMode);
+      if (vs && vs.loopOn) {
+        loopStartTime = vs.loopStartTime || 0;
+        loopEndTime = vs.loopEndTime || 10;
       }
+
+      // Resume position, applied after metadata loads
+      pendingRestorePosition = vs ? (vs.lastPosition || 0) : 0;
+    }
+
+    // Persist the saved-videos list via the unified store.
+    function persistSavedVideos() {
+      if (stateManager) {
+        stateManager.state.savedVideos = savedVideos;
+        stateManager.saveStateSoon();
+      }
+    }
+
+    // Persist global prefs (volume, search) + the current video's per-video state.
+    function saveUserPreferences() {
+      if (!stateManager) return;
+      stateManager.state.volume = video.volume;
+      stateManager.state.lastSearchQuery = searchQuery.value;
+      if (lastVideoId) saveVideoState(lastVideoId);
+      stateManager.saveStateSoon();
+    }
+
+    // Apply global prefs (volume, search) from loaded state. Per-video settings come
+    // from applyVideoState when a video loads.
+    function loadUserPreferences() {
+      if (!stateManager) return;
+      const s = stateManager.state;
+      if (s.volume !== undefined) {
+        video.volume = s.volume;
+        volumeSlider.value = s.volume;
+        updateVolumeIcon();
+      }
+      if (s.lastSearchQuery) searchQuery.value = s.lastSearchQuery;
     }
 
     // Save/Unsave functionality
@@ -2590,12 +2782,33 @@ body {
     video.addEventListener('loadedmetadata', updateSaveButton);
 
     // Search YouTube videos - SIMPLIFIED FOR DEMO
+    // Extract a YouTube video id from a URL or bare id, else null.
+    function parseYouTubeId(str) {
+      const s = (str || '').trim();
+      if (/^[a-zA-Z0-9_-]{11}$/.test(s)) return s;
+      const m = s.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/|live\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+      return m ? m[1] : null;
+    }
+
     async function searchYouTube() {
       const query = searchQuery.value.trim();
       if (!query) return alert('Please enter a search term.');
-      
-      resultsDiv.innerHTML = '<div class="loading"><i class="fas fa-heart"></i>Searching for dance tutorials...</div>';
-      
+
+      // If the user pasted a YouTube URL or video id, play it directly.
+      const pastedId = parseYouTubeId(query);
+      if (pastedId) {
+        if (lastVideoId && stateManager) { saveVideoState(lastVideoId); stateManager.saveState(); }
+        lastVideoId = pastedId;
+        lastVideoTitle = 'YouTube Video';
+        lastThumbnail = `https://i.ytimg.com/vi/${pastedId}/mqdefault.jpg`;
+        saveUserPreferences();
+        downloadAndPlay(pastedId);
+        return;
+      }
+
+      resultsDiv.innerHTML = '<div class="skeleton-grid">' +
+        Array.from({ length: 8 }).map(() => '<div class="skeleton-card"></div>').join('') + '</div>';
+
       // Save search query to preferences
       saveUserPreferences();
       
@@ -2633,6 +2846,8 @@ body {
           `;
           
           div.onclick = () => {
+            // Capture the outgoing video's state before switching.
+            if (lastVideoId && stateManager) { saveVideoState(lastVideoId); stateManager.saveState(); }
             lastVideoTitle = title;
             lastVideoId = videoId;
             lastThumbnail = thumbnail;
@@ -2677,47 +2892,61 @@ body {
     }
 
     // Download and play video - ENHANCED WITH LOADING OVERLAY
-    async function downloadAndPlay(videoId) {
+    async function downloadAndPlay(videoId, { autoplay = true } = {}) {
       // Clear search results
       resultsDiv.innerHTML = '';
-      
+
       // Show video loading overlay
       showVideoLoadingOverlay();
-      
-      // Start progress simulation
+
+      // Real progress (from main) overrides this simulated fallback.
+      activeDownloadId = videoId;
       simulateDownloadProgress();
-      
+
       try {
         // Reset controls when new video is selected
         resetControls();
-        
+
         // Set video title (clean up title)
         const cleanTitle = lastVideoTitle.replace(/[^\w\s-]/gi, '');
         videoTitle.textContent = cleanTitle || 'Dance Tutorial';
         videoTitle.style.display = 'block';
-        
+
         // Use Electron IPC for download
         const data = await window.electronAPI.downloadVideo(videoId);
-        
+
         if (!data.url) throw new Error('No video URL returned');
-        
+
+        // Use the real title returned by yt-dlp (esp. for pasted URLs).
+        if (data.title) {
+          lastVideoTitle = data.title;
+          videoTitle.textContent = data.title.replace(/[^\w\s-]/gi, '') || 'Dance Tutorial';
+          if (lastVideoId === videoId && stateManager) { saveVideoState(videoId); stateManager.saveStateSoon(); }
+        }
+        if (data.thumb) lastThumbnail = data.thumb;
+        // Track in the Recent list.
+        pushRecent(videoId, lastVideoTitle, lastThumbnail);
+
         // Set video source
         video.src = data.url;
         video.load();
         
         video.oncanplay = async () => {
-          try {
-            const playPromise = video.play();
-            
-            if (playPromise !== undefined) {
-              await playPromise;
-              playIcon.className = 'fas fa-pause';
+          if (autoplay) {
+            try {
+              const playPromise = video.play();
+              if (playPromise !== undefined) {
+                await playPromise;
+                playIcon.className = 'fas fa-pause';
+              }
+            } catch (err) {
+              console.warn('Playback prevented:', err);
+              playIcon.className = 'fas fa-play';
             }
-          } catch (err) {
-            console.warn('Playback prevented:', err);
+          } else {
             playIcon.className = 'fas fa-play';
           }
-          
+
           // Mark video as loaded
           markVideoAsLoaded();
         };
@@ -2760,7 +2989,7 @@ body {
         });
         
         saveIcon.className = 'fas fa-heart';
-        setCookie('savedVideos', savedVideos);
+        persistSavedVideos();
         updateSavedVideos();
         
         saveNotification.textContent = 'Video saved!';
@@ -2777,7 +3006,7 @@ body {
     clearSavedBtn.addEventListener('click', () => {
       if (confirm('Are you sure you want to clear all saved videos?')) {
         savedVideos = [];
-        setCookie('savedVideos', savedVideos);
+        persistSavedVideos();
         updateSavedVideos();
         
         saveNotification.textContent = 'All videos cleared!';
@@ -2819,6 +3048,9 @@ body {
             <button class="saved-btn play-saved" data-id="${video.id}" title="Play Video">
               <i class="fas fa-play"></i>
             </button>
+            <button class="saved-btn queue-add" data-id="${video.id}" data-title="${escapeAttr(video.title || '')}" title="Add to queue">
+              <i class="fas fa-list-ul"></i>
+            </button>
             <button class="saved-btn remove-saved" data-id="${video.id}" title="Remove from Saved">
               <i class="fas fa-trash"></i>
             </button>
@@ -2835,6 +3067,8 @@ body {
           const videoId = btn.getAttribute('data-id');
           const video = savedVideos.find(v => v.id === videoId);
           if (video) {
+            // Capture the outgoing video's state before switching.
+            if (lastVideoId && stateManager) { saveVideoState(lastVideoId); stateManager.saveState(); }
             lastVideoTitle = video.title;
             lastVideoId = video.id;
             lastThumbnail = video.thumbnail;
@@ -2850,7 +3084,149 @@ body {
           removeSavedVideo(videoId);
         });
       });
+
+      applyLibraryFilter();
     }
+
+    // Play any video by id (captures outgoing state first). Shared by saved/offline lists.
+    function playVideoById(id, title, thumbnail) {
+      if (!id) return;
+      if (lastVideoId && stateManager) { saveVideoState(lastVideoId); stateManager.saveState(); }
+      lastVideoId = id;
+      lastVideoTitle = title
+        || (stateManager && stateManager.state.videos[id] && stateManager.state.videos[id].title)
+        || 'Video';
+      lastThumbnail = thumbnail || `https://i.ytimg.com/vi/${id}/mqdefault.jpg`;
+      downloadAndPlay(id);
+    }
+
+    // ---- Play queue (auto-advance on video end) ----
+    const playQueue = [];
+    function addToQueue(id, title) {
+      if (!id || playQueue.some(q => q.id === id)) return;
+      playQueue.push({ id, title: title || id });
+      flashNotification(`Queued: ${title || id} (${playQueue.length} in queue)`);
+    }
+    // Delegated handler for the "add to queue" buttons across all library lists.
+    document.addEventListener('click', (e) => {
+      const b = e.target.closest && e.target.closest('.queue-add');
+      if (b) { e.stopPropagation(); addToQueue(b.dataset.id, b.dataset.title); }
+    });
+    // Auto-advance when the current video finishes (and isn't looping).
+    video.addEventListener('ended', () => {
+      if (isLoopMode || !playQueue.length) return;
+      const next = playQueue.shift();
+      if (lastVideoId && stateManager) { saveVideoState(lastVideoId); stateManager.saveState(); }
+      playVideoById(next.id, next.title);
+    });
+
+    // Render the offline (downloaded-to-disk) library.
+    async function updateOfflineLibrary() {
+      offlineVideosContainer.innerHTML = '<div class="empty-saved"><i class="fas fa-spinner fa-spin"></i><p>Loading…</p></div>';
+      let list = [];
+      try { list = await window.electronAPI.getVideoList(); } catch (e) {}
+      if (!list || !list.length) {
+        offlineVideosContainer.innerHTML = `
+          <div class="empty-saved"><i class="fas fa-hdd"></i><p>No downloaded videos</p>
+          <p>Play a video to keep it offline</p></div>`;
+        return;
+      }
+      const titleFor = (it) => it.title
+        || (savedVideos.find(v => v.id === it.id) || {}).title
+        || (stateManager && stateManager.state.videos[it.id] && stateManager.state.videos[it.id].title)
+        || it.id;
+      list.sort((a, b) => new Date(b.created || 0) - new Date(a.created || 0));
+      offlineVideosContainer.innerHTML = '';
+      list.forEach(it => {
+        const title = titleFor(it);
+        const sizeMB = it.size ? (it.size / 1048576).toFixed(0) + ' MB' : '';
+        const el = document.createElement('div');
+        el.className = 'saved-video offline-video';
+        el.innerHTML = `
+          <img src="${it.thumb || `https://i.ytimg.com/vi/${it.id}/mqdefault.jpg`}" alt="" class="saved-thumb" onerror="this.style.visibility='hidden'">
+          <div class="saved-details">
+            <div class="saved-video-title">${escapeAttr(title)}</div>
+            <div class="saved-sub">${sizeMB}</div>
+          </div>
+          <div class="saved-actions">
+            <button class="saved-btn play-offline" data-id="${it.id}" data-title="${escapeAttr(title)}" title="Play"><i class="fas fa-play"></i></button>
+            <button class="saved-btn queue-add" data-id="${it.id}" data-title="${escapeAttr(title)}" title="Add to queue"><i class="fas fa-list-ul"></i></button>
+            <button class="saved-btn delete-offline" data-id="${it.id}" title="Delete from disk"><i class="fas fa-trash"></i></button>
+          </div>`;
+        offlineVideosContainer.appendChild(el);
+      });
+      offlineVideosContainer.querySelectorAll('.play-offline').forEach(btn =>
+        btn.addEventListener('click', () => playVideoById(btn.dataset.id, btn.dataset.title)));
+      offlineVideosContainer.querySelectorAll('.delete-offline').forEach(btn =>
+        btn.addEventListener('click', async () => {
+          if (!confirm('Delete this downloaded video from disk?')) return;
+          try { await window.electronAPI.deleteVideo(btn.dataset.id); } catch (e) {}
+          updateOfflineLibrary();
+        }));
+      applyLibraryFilter();
+    }
+
+    // Track a played video in the Recent list (deduped, capped at 12).
+    function pushRecent(id, title, thumbnail) {
+      if (!id || !stateManager) return;
+      let list = (stateManager.state.recentVideos || []).filter(v => v.id !== id);
+      list.unshift({ id, title: title || id, thumbnail: thumbnail || `https://i.ytimg.com/vi/${id}/mqdefault.jpg`, at: Date.now() });
+      stateManager.state.recentVideos = list.slice(0, 12);
+      stateManager.saveStateSoon();
+    }
+
+    // Render the recently-played list.
+    function renderRecent() {
+      const list = (stateManager && stateManager.state.recentVideos) || [];
+      if (!list.length) {
+        recentVideosContainer.innerHTML = `<div class="empty-saved"><i class="fas fa-clock-rotate-left"></i><p>Nothing played yet</p></div>`;
+        return;
+      }
+      recentVideosContainer.innerHTML = '';
+      list.forEach(v => {
+        const el = document.createElement('div');
+        el.className = 'saved-video';
+        el.innerHTML = `
+          <img src="${v.thumbnail}" alt="" class="saved-thumb" onerror="this.style.visibility='hidden'">
+          <div class="saved-details"><div class="saved-video-title">${escapeAttr(v.title)}</div></div>
+          <div class="saved-actions">
+            <button class="saved-btn play-recent" data-id="${v.id}" data-title="${escapeAttr(v.title)}" title="Play"><i class="fas fa-play"></i></button>
+            <button class="saved-btn queue-add" data-id="${v.id}" data-title="${escapeAttr(v.title)}" title="Add to queue"><i class="fas fa-list-ul"></i></button>
+          </div>`;
+        recentVideosContainer.appendChild(el);
+      });
+      recentVideosContainer.querySelectorAll('.play-recent').forEach(btn =>
+        btn.addEventListener('click', () => playVideoById(btn.dataset.id, btn.dataset.title)));
+      applyLibraryFilter();
+    }
+
+    // Filter whichever library list is visible by title text.
+    function applyLibraryFilter() {
+      if (!libraryFilter) return;
+      const q = (libraryFilter.value || '').trim().toLowerCase();
+      const container = [savedVideosContainer, recentVideosContainer, offlineVideosContainer]
+        .find(c => c.style.display !== 'none') || savedVideosContainer;
+      container.querySelectorAll('.saved-video').forEach(card => {
+        const t = (card.querySelector('.saved-video-title')?.textContent || '').toLowerCase();
+        card.style.display = (!q || t.includes(q)) ? '' : 'none';
+      });
+    }
+    if (libraryFilter) libraryFilter.addEventListener('input', applyLibraryFilter);
+
+    // Library tabs (Saved / Recent / Downloaded)
+    document.querySelectorAll('.library-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.library-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        const which = tab.dataset.tab;
+        savedVideosContainer.style.display = which === 'saved' ? '' : 'none';
+        recentVideosContainer.style.display = which === 'recent' ? '' : 'none';
+        offlineVideosContainer.style.display = which === 'offline' ? '' : 'none';
+        if (which === 'offline') updateOfflineLibrary();
+        if (which === 'recent') renderRecent();
+        applyLibraryFilter();
+      });
+    });
 
     // Update heights on window resize and video load
     window.addEventListener('resize', updatePlayerHeights);
@@ -2871,7 +3247,7 @@ body {
           savedAt: new Date().toISOString()
         });
         
-        setCookie('savedVideos', savedVideos);
+        persistSavedVideos();
         updateSavedVideos();
         
         saveNotification.textContent = 'Video saved!';
@@ -2885,7 +3261,7 @@ body {
     // Remove saved video
     function removeSavedVideo(videoId) {
       savedVideos = savedVideos.filter(video => video.id !== videoId);
-      setCookie('savedVideos', savedVideos);
+      persistSavedVideos();
       updateSavedVideos();
       
       saveNotification.textContent = 'Video removed!';
@@ -2933,17 +3309,297 @@ body {
           e.preventDefault();
           addBookmark();
           break;
+        // Frame-by-frame stepping (auto-pauses) — video-editor convention
+        case ',':
+          e.preventDefault();
+          frameStep(-1);
+          break;
+        case '.':
+          e.preventDefault();
+          frameStep(1);
+          break;
+        // Speed down / up
+        case '-':
+        case '_':
+          e.preventDefault();
+          adjustSpeed(-1);
+          break;
+        case '=':
+        case '+':
+          e.preventDefault();
+          adjustSpeed(1);
+          break;
+        // A–B loop: set in / set out / clear
+        case '[':
+          e.preventDefault();
+          setLoopIn();
+          break;
+        case ']':
+          e.preventDefault();
+          setLoopOut();
+          break;
+        case '\\':
+          e.preventDefault();
+          clearLoop();
+          break;
+        // Toggle loop count-in (pre-roll)
+        case 'c':
+        case 'C':
+          e.preventDefault();
+          toggleCountIn();
+          break;
+        // Speed ramp / metronome
+        case 'r':
+        case 'R':
+          e.preventDefault();
+          toggleSpeedRamp();
+          break;
+        case 't':
+        case 'T':
+          e.preventDefault();
+          tapTempo();
+          break;
+        case 'g':
+        case 'G':
+          e.preventDefault();
+          toggleMetronome();
+          break;
+        // Hold to temporarily slow down ("scrub gear")
+        case 's':
+        case 'S':
+          e.preventDefault();
+          startScrubGear();
+          break;
+        // Keyboard shortcut overlay
+        case '?':
+          e.preventDefault();
+          toggleShortcutOverlay();
+          break;
+        case 'Escape': {
+          const ov = document.getElementById('shortcutOverlay');
+          if (ov) ov.classList.remove('visible');
+          break;
+        }
+        default:
+          // 1–9 → loop the Nth saved section
+          if (e.key >= '1' && e.key <= '9') {
+            const sections = ((bookmarks[lastVideoId] || []).filter(b => b.type === 'range'));
+            const s = sections[parseInt(e.key, 10) - 1];
+            if (s) { e.preventDefault(); loopSection(s.id); }
+          }
+          break;
       }
     });
 
+    // Release the scrub-gear key → restore speed
+    document.addEventListener('keyup', (e) => {
+      if (e.key === 's' || e.key === 'S') stopScrubGear();
+    });
+
+    // ---- Practice tool helpers ----
+    let countInEnabled = false;   // loop restarts a bit before the in-point
+    const LOOP_PREROLL = 1.5;     // seconds of pre-roll when count-in is on
+    let loopRepCount = 0;         // times the current loop has repeated
+    let scrubGearActive = false;
+    let scrubGearPrevRate = 1;
+
+    // Step one frame (~1/30s) while paused — for analyzing exact positions.
+    function frameStep(dir) {
+      if (!video.duration) return;
+      video.pause();
+      const frame = 1 / 30;
+      video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + dir * frame));
+    }
+
+    // A–B loop: set the in-point at the playhead.
+    function setLoopIn() {
+      if (!video.duration) return;
+      loopStartTime = video.currentTime;
+      if (loopEndTime <= loopStartTime) loopEndTime = Math.min(video.duration, loopStartTime + 5);
+      enableLoopFromKeys();
+      flashNotification(`Loop in: ${formatTime(loopStartTime)}`);
+    }
+
+    // A–B loop: set the out-point at the playhead.
+    function setLoopOut() {
+      if (!video.duration) return;
+      loopEndTime = video.currentTime;
+      if (loopEndTime <= loopStartTime) loopStartTime = Math.max(0, loopEndTime - 5);
+      enableLoopFromKeys();
+      flashNotification(`Loop out: ${formatTime(loopEndTime)}`);
+    }
+
+    function enableLoopFromKeys() {
+      isLoopMode = true;
+      loopBtn.classList.add('active');
+      loopRange.style.display = 'block';
+      loopStartHandle.style.display = 'flex';
+      loopEndHandle.style.display = 'flex';
+      loopIndicator.style.display = 'block';
+      loopHighlight.classList.add('active');
+      loopRepCount = 0;
+      updateLoopRangeDisplay();
+      updateLoopIndicator();
+      startLoop();
+      saveUserPreferences();
+    }
+
+    // Clear / disable the loop.
+    function clearLoop() {
+      if (isLoopMode) toggleLoopMode(); // turns loop off + saves
+      flashNotification('Loop cleared');
+    }
+
+    // Toggle loop count-in (pre-roll before the in-point).
+    function toggleCountIn() {
+      countInEnabled = !countInEnabled;
+      flashNotification(countInEnabled ? 'Count-in on (1.5s pre-roll)' : 'Count-in off');
+      updateLoopIndicator();
+    }
+
+    // Hold-to-slow "scrub gear".
+    function startScrubGear() {
+      if (scrubGearActive) return;
+      scrubGearActive = true;
+      scrubGearPrevRate = video.playbackRate;
+      video.playbackRate = 0.25;
+      speedBtn.textContent = '0.25x';
+    }
+    function stopScrubGear() {
+      if (!scrubGearActive) return;
+      scrubGearActive = false;
+      video.playbackRate = scrubGearPrevRate;
+      speedBtn.textContent = `${scrubGearPrevRate}x`;
+    }
+
+    // Lightweight toast reused by the practice tools.
+    function flashNotification(msg, ms = 1500) {
+      saveNotification.textContent = msg;
+      saveNotification.style.display = 'block';
+      clearTimeout(flashNotification._t);
+      flashNotification._t = setTimeout(() => { saveNotification.style.display = 'none'; }, ms);
+    }
+
+    // Keyboard shortcut overlay (press ? to toggle, Esc/click to close).
+    function toggleShortcutOverlay() {
+      let el = document.getElementById('shortcutOverlay');
+      if (!el) {
+        const style = document.createElement('style');
+        style.textContent = `
+          #shortcutOverlay { position: fixed; inset: 0; z-index: 4000; display: none;
+            align-items: center; justify-content: center; background: rgba(55,65,81,0.45);
+            backdrop-filter: blur(3px); animation: soFade .18s ease; }
+          #shortcutOverlay.visible { display: flex; }
+          @keyframes soFade { from { opacity: 0 } to { opacity: 1 } }
+          #shortcutOverlay .shortcut-card { background: #faf8f5; border: 2px solid #e8e2d4;
+            border-radius: 20px; padding: 28px 34px; max-width: 460px; width: 90%;
+            box-shadow: 0 20px 60px rgba(138,155,110,0.35); font-family: 'Poppins', sans-serif;
+            color: #374151; }
+          #shortcutOverlay h2 { font-family: 'Comfortaa', cursive; margin: 0 0 16px; color: #7a8b5e;
+            font-size: 1.4rem; }
+          #shortcutOverlay .shortcut-grid { display: grid; grid-template-columns: auto 1fr;
+            gap: 8px 16px; align-items: center; }
+          #shortcutOverlay .k { font-family: monospace; background: #f0ece4; border: 1px solid #d8d1b9;
+            border-radius: 8px; padding: 3px 9px; font-weight: 600; text-align: center; white-space: nowrap; }
+          #shortcutOverlay .shortcut-hint { margin: 18px 0 0; text-align: center; color: #8a7a6d; font-size: .85rem; }
+        `;
+        document.head.appendChild(style);
+        el = document.createElement('div');
+        el.id = 'shortcutOverlay';
+        el.innerHTML = `
+          <div class="shortcut-card">
+            <h2>⌨︎ Keyboard Shortcuts</h2>
+            <div class="shortcut-grid">
+              <span class="k">Space</span><span>Play / pause</span>
+              <span class="k">← / →</span><span>Skip 5s back / forward</span>
+              <span class="k">, / .</span><span>Frame step (pauses)</span>
+              <span class="k">- / =</span><span>Speed down / up</span>
+              <span class="k">[ / ]</span><span>Set loop in / out</span>
+              <span class="k">\\</span><span>Clear loop</span>
+              <span class="k">L</span><span>Toggle loop</span>
+              <span class="k">C</span><span>Toggle count-in (pre-roll)</span>
+              <span class="k">R</span><span>Toggle speed ramp (→1x each loop)</span>
+              <span class="k">S</span><span>Hold to slow to 0.25x</span>
+              <span class="k">1–9</span><span>Loop saved section N</span>
+              <span class="k">T / G</span><span>Tap tempo / metronome on-off</span>
+              <span class="k">M</span><span>Mirror</span>
+              <span class="k">B</span><span>Bookmark</span>
+              <span class="k">F</span><span>Fullscreen</span>
+              <span class="k">?</span><span>This help</span>
+            </div>
+            <p class="shortcut-hint">Press ? or Esc to close</p>
+          </div>`;
+        el.addEventListener('click', () => el.classList.remove('visible'));
+        document.body.appendChild(el);
+      }
+      el.classList.toggle('visible');
+    }
+
+    // ---- Speed ramp (progressive practice): speed up one step each loop, up to 1x ----
+    let speedRampEnabled = false;
+    function toggleSpeedRamp() {
+      speedRampEnabled = !speedRampEnabled;
+      flashNotification(speedRampEnabled ? 'Speed ramp on (faster each loop → 1x)' : 'Speed ramp off');
+    }
+
+    // ---- Metronome (Web Audio) with tap-tempo ----
+    const metro = { on: false, bpm: 120, taps: [], next: 0, timer: null, ctx: null };
+    function ensureAudio() {
+      if (!metro.ctx) metro.ctx = new (window.AudioContext || window.webkitAudioContext)();
+      return metro.ctx;
+    }
+    function metroClick(time, accent) {
+      const ctx = ensureAudio();
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.frequency.value = accent ? 1500 : 1000;
+      g.gain.setValueAtTime(0.0001, time);
+      g.gain.exponentialRampToValueAtTime(0.55, time + 0.001);
+      g.gain.exponentialRampToValueAtTime(0.0001, time + 0.05);
+      osc.connect(g).connect(ctx.destination);
+      osc.start(time);
+      osc.stop(time + 0.06);
+    }
+    function metroScheduler() {
+      const ctx = ensureAudio();
+      const spb = 60 / metro.bpm;
+      while (metro.next < ctx.currentTime + 0.1) {
+        metroClick(metro.next, false);
+        metro.next += spb;
+      }
+    }
+    function toggleMetronome() {
+      if (metro.on) {
+        clearInterval(metro.timer); metro.timer = null; metro.on = false;
+        flashNotification('Metronome off');
+        return;
+      }
+      const ctx = ensureAudio();
+      if (ctx.state === 'suspended') ctx.resume();
+      metro.on = true;
+      metro.next = ctx.currentTime + 0.05;
+      metro.timer = setInterval(metroScheduler, 25);
+      flashNotification(`Metronome on — ${metro.bpm} BPM`);
+    }
+    function tapTempo() {
+      const now = performance.now();
+      metro.taps = metro.taps.filter(t => now - t < 2500); // reset if a long gap
+      metro.taps.push(now);
+      if (metro.taps.length >= 2) {
+        const iv = [];
+        for (let i = 1; i < metro.taps.length; i++) iv.push(metro.taps[i] - metro.taps[i - 1]);
+        const avg = iv.reduce((a, b) => a + b, 0) / iv.length;
+        metro.bpm = Math.max(30, Math.min(300, Math.round(60000 / avg)));
+        flashNotification(`Tap tempo: ${metro.bpm} BPM`);
+        if (metro.on) metro.next = ensureAudio().currentTime + 0.05;
+      } else {
+        flashNotification('Tap tempo… keep tapping');
+      }
+    }
+
     // Reset all controls to default
     function resetControls() {
-      video.playbackRate = 1;
-      speedBtn.textContent = '1x';
-      
-      video.classList.remove('mirror-video');
-      mirrorBtn.classList.remove('active');
-      
+      // Visual reset of the loop/progress UI before the new video loads.
       isLoopMode = false;
       loopBtn.classList.remove('active');
       loopRange.style.display = 'none';
@@ -2952,21 +3608,15 @@ body {
       loopIndicator.style.display = 'none';
       loopHighlight.classList.remove('active');
       stopLoop();
-      
-      video.volume = 1;
-      volumeSlider.value = 1;
-      updateVolumeIcon();
-      
+
       currentTimeLabel.textContent = '0:00';
       durationLabel.textContent = '0:00';
-      
       playbackProgress.style.width = '0%';
-      
       saveIcon.className = 'far fa-heart';
-      
-      setTimeout(() => {
-        loadUserPreferences();
-      }, 100);
+
+      // Apply this video's remembered settings (speed + mirror now; loop region and
+      // resume position are finished in the loadedmetadata handler). Volume stays global.
+      applyVideoState(lastVideoId);
     }
 
     // Play/Pause toggle
@@ -2981,26 +3631,29 @@ body {
     }
 
     // YouTube-like skip animation
-    function skipVideo(seconds) {
-      const oldTime = video.currentTime;
-      video.currentTime = Math.max(0, Math.min(video.duration, oldTime + seconds));
-      
-      skipIcon.className = seconds > 0 ? 'fas fa-forward' : 'fas fa-backward';
-      
-      const rect = playbackBar.getBoundingClientRect();
-      const percent = (oldTime / video.duration) * 100;
-      skipAnimation.style.left = `${(percent / 100) * rect.width}px`;
-      
-      skipAnimation.style.display = 'flex';
-      skipAnimation.classList.add('visible');
-      
-      setTimeout(() => {
-        skipAnimation.classList.remove('visible');
-        setTimeout(() => {
-          skipAnimation.style.display = 'none';
-        }, 300);
-      }, 800);
-    }
+    function skipVideo(secondsBase) {
+  // Scale skip by current playback rate
+  const factor = video.playbackRate || 1;
+  const seconds = secondsBase * factor;
+
+  const oldTime = video.currentTime || 0;
+  const dur = video.duration || 0;
+  const newTime = Math.max(0, Math.min(dur, oldTime + seconds));
+  video.currentTime = newTime;
+
+  // existing animation code preserved
+  skipIcon.className = seconds > 0 ? 'fas fa-forward' : 'fas fa-backward';
+  const rect = playbackBar.getBoundingClientRect();
+  const percent = dur ? (oldTime / dur) * 100 : 0;
+  skipAnimation.style.left = `${(percent / 100) * rect.width}px`;
+  skipAnimation.style.display = 'flex';
+  skipAnimation.classList.add('visible');
+  setTimeout(() => {
+    skipAnimation.classList.remove('visible');
+    setTimeout(() => { skipAnimation.style.display = 'none'; }, 300);
+  }, 800);
+}
+
 
     // Toggle mirror
     function toggleMirror() {
@@ -3046,13 +3699,14 @@ body {
       if (isLoopMode) {
         loopStartTime = video.currentTime;
         loopEndTime = Math.min(video.duration, video.currentTime + 10);
+        loopRepCount = 0;
         updateLoopRangeDisplay();
         updateLoopIndicator();
         startLoop();
       } else {
         stopLoop();
       }
-      
+
       saveUserPreferences();
     }
 
@@ -3074,15 +3728,24 @@ body {
       
       function seamlessLoop() {
         if (!isLoopMode) return;
-        
+
         const currentTime = video.currentTime;
         const buffer = 0.05;
-        
+
         if (currentTime >= loopEndTime - buffer) {
           const bufferProgress = (currentTime - (loopEndTime - buffer)) / buffer;
-          video.currentTime = loopStartTime + (bufferProgress * buffer);
+          // Count-in: restart a bit before the in-point for a running start into the move.
+          video.currentTime = countInEnabled
+            ? Math.max(0, loopStartTime - LOOP_PREROLL)
+            : loopStartTime + (bufferProgress * buffer);
+          loopRepCount++;
+          // Progressive practice: bump speed one step each loop until reaching 1x.
+          if (speedRampEnabled && currentSpeedIndex < speeds.indexOf(1)) {
+            applySpeedFromIndex(currentSpeedIndex + 1);
+          }
+          updateLoopIndicator();
         }
-        
+
         loopAnimationFrame = requestAnimationFrame(seamlessLoop);
       }
       
@@ -3097,10 +3760,17 @@ body {
       }
     }
 
-    // Update loop indicator
+    // Update loop indicator (shows region, rep count, and count-in state)
     function updateLoopIndicator() {
       loopStartLabel.textContent = formatTime(loopStartTime);
       loopEndLabel.textContent = formatTime(loopEndTime);
+      const extra = document.getElementById('loopExtra');
+      if (extra) {
+        const bits = [];
+        if (loopRepCount > 0) bits.push(`×${loopRepCount}`);
+        if (countInEnabled) bits.push('count-in');
+        extra.textContent = bits.length ? ` (${bits.join(' • ')})` : '';
+      }
     }
 
     // Show pause animation
@@ -3119,20 +3789,46 @@ body {
     });
 
     video.addEventListener('play', () => playIcon.className = 'fas fa-pause');
-    video.addEventListener('pause', () => playIcon.className = 'fas fa-play');
+    video.addEventListener('pause', () => {
+      playIcon.className = 'fas fa-play';
+      // Capture position/settings when the user pauses.
+      if (lastVideoId && stateManager) { saveVideoState(lastVideoId); stateManager.saveStateSoon(); }
+    });
 
     video.addEventListener('click', () => {
       togglePlayPause();
       showPauseAnimation();
     });
 
-    speedBtn.addEventListener('click', () => {
-      currentSpeedIndex = (currentSpeedIndex + 1) % speeds.length;
-      const speed = speeds[currentSpeedIndex];
-      video.playbackRate = speed;
-      speedBtn.textContent = `${speed}x`;
-      saveUserPreferences();
-    });
+    // --- speed helpers (add near your other speed vars) ---
+  function applySpeedFromIndex(idx) {
+    currentSpeedIndex = Math.max(0, Math.min(speeds.length - 1, idx));
+    const speed = speeds[currentSpeedIndex];
+    video.playbackRate = speed;
+    speedBtn.textContent = `${speed}x`;
+    saveUserPreferences();
+  }
+
+  function adjustSpeed(direction) {
+    // direction: +1 faster, -1 slower (no wrap)
+    applySpeedFromIndex(currentSpeedIndex + (direction > 0 ? 1 : -1));
+  }
+
+  // --- replace the old speedBtn.addEventListener('click', ...) with: ---
+  speedBtn.addEventListener('click', (e) => {
+    // Normal click = faster; Shift/Alt click = slower
+    if (e.shiftKey || e.altKey) {
+      adjustSpeed(-1);
+    } else {
+      adjustSpeed(1);
+    }
+  });
+
+  // Optional convenience: right-click to slow down
+  speedBtn.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    adjustSpeed(-1);
+  });
 
     loopBtn.addEventListener('click', toggleLoopMode);
     mirrorBtn.addEventListener('click', toggleMirror);
@@ -3167,9 +3863,12 @@ body {
       bookmarks = savedBookmarks;
     }
 
-    // Save bookmarks to cookies
+    // Persist bookmarks via the unified store (snapshotted in getCurrentState).
     function saveBookmarks() {
-      setCookie('videoBookmarks', bookmarks);
+      if (stateManager) {
+        stateManager.state.bookmarks = bookmarks;
+        stateManager.saveStateSoon();
+      }
     }
 
     // Add bookmark at current time
@@ -3198,6 +3897,38 @@ body {
       }, 2000);
     }
 
+    // Save the current loop region as a named section (a range marker).
+    function addSection() {
+      if (!lastVideoId || !video.duration) return;
+      let start = loopStartTime, end = loopEndTime;
+      if (!(end > start)) { // no valid loop region — default to a 10s window at the playhead
+        start = video.currentTime;
+        end = Math.min(video.duration, start + 10);
+      }
+      const existing = (bookmarks[lastVideoId] || []).filter(b => b.type === 'range').length;
+      const raw = prompt('Section name:', `Section ${existing + 1}`);
+      if (raw === null) return; // cancelled
+      const title = raw.trim() || `Section ${existing + 1}`;
+      if (!bookmarks[lastVideoId]) bookmarks[lastVideoId] = [];
+      bookmarks[lastVideoId].push({ id: `section-${Date.now()}`, type: 'range', start, end, title });
+      currentBookmarks = bookmarks[lastVideoId];
+      renderBookmarks();
+      renderBookmarksList();
+      saveBookmarks();
+      flashNotification(`Section saved: ${formatTime(start)}–${formatTime(end)}`);
+    }
+
+    // Load a section into the active loop and start looping it.
+    function loopSection(sectionId) {
+      const s = (bookmarks[lastVideoId] || []).find(b => b.id === sectionId);
+      if (!s || s.type !== 'range') return;
+      loopStartTime = s.start;
+      loopEndTime = s.end;
+      video.currentTime = s.start;
+      enableLoopFromKeys();
+      flashNotification(`Looping: ${s.title}`);
+    }
+
     // Remove bookmark
     function removeBookmark(bookmarkId) {
       if (!lastVideoId || !bookmarks[lastVideoId]) return;
@@ -3209,110 +3940,115 @@ body {
       saveBookmarks();
     }
 
-    // Render bookmarks on progress bar
+    // Render bookmarks (points) and sections (range bands) on the progress bar
     function renderBookmarks() {
-      // Clear existing bookmarks
-      document.querySelectorAll('.bookmark').forEach(el => el.remove());
-      
+      document.querySelectorAll('.bookmark, .section-band').forEach(el => el.remove());
+
       if (!video.duration || !currentBookmarks || currentBookmarks.length === 0) return;
-      
-      currentBookmarks.forEach(bookmark => {
-        const percent = (bookmark.time / video.duration) * 100;
-        const bookmarkEl = document.createElement('div');
-        bookmarkEl.className = 'bookmark';
-        bookmarkEl.style.left = `${percent}%`;
-        bookmarkEl.dataset.time = bookmark.time;
-        bookmarkEl.dataset.id = bookmark.id;
-        
-        // Add tooltip
-        const tooltip = document.createElement('div');
-        tooltip.className = 'bookmark-tooltip';
-        tooltip.textContent = formatTime(bookmark.time);
-        bookmarkEl.appendChild(tooltip);
-        
-        // Click to seek
-        bookmarkEl.addEventListener('click', (e) => {
-          e.stopPropagation();
-          video.currentTime = bookmark.time;
-        });
-        
-        // Right-click to delete
-        bookmarkEl.addEventListener('contextmenu', (e) => {
-          e.preventDefault();
-          removeBookmark(bookmark.id);
-        });
-        
-        progressContainer.appendChild(bookmarkEl);
+
+      currentBookmarks.forEach(bm => {
+        if (bm.type === 'range') {
+          const startPct = (bm.start / video.duration) * 100;
+          const widthPct = Math.max(0.5, ((bm.end - bm.start) / video.duration) * 100);
+          const band = document.createElement('div');
+          band.className = 'section-band';
+          band.style.left = `${startPct}%`;
+          band.style.width = `${widthPct}%`;
+          band.dataset.id = bm.id;
+          band.title = `${bm.title} (${formatTime(bm.start)}–${formatTime(bm.end)}) — click to loop, right-click to delete`;
+          const label = document.createElement('span');
+          label.className = 'section-band-label';
+          label.textContent = bm.title;
+          band.appendChild(label);
+          band.addEventListener('click', (e) => { e.stopPropagation(); loopSection(bm.id); });
+          band.addEventListener('contextmenu', (e) => { e.preventDefault(); removeBookmark(bm.id); });
+          progressContainer.appendChild(band);
+        } else {
+          const percent = (bm.time / video.duration) * 100;
+          const el = document.createElement('div');
+          el.className = 'bookmark';
+          el.style.left = `${percent}%`;
+          el.dataset.time = bm.time;
+          el.dataset.id = bm.id;
+          const tooltip = document.createElement('div');
+          tooltip.className = 'bookmark-tooltip';
+          tooltip.textContent = bm.title || formatTime(bm.time);
+          el.appendChild(tooltip);
+          el.addEventListener('click', (e) => { e.stopPropagation(); video.currentTime = bm.time; });
+          el.addEventListener('contextmenu', (e) => { e.preventDefault(); removeBookmark(bm.id); });
+          progressContainer.appendChild(el);
+        }
       });
     }
 
-    // Render bookmarks list in manager
+    function escapeAttr(s) {
+      return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    // Render bookmarks (points) and sections (ranges) in the side panel
     function renderBookmarksList() {
       bookmarksContainer.innerHTML = '';
-      
-      if (!lastVideoId || !bookmarks[lastVideoId] || bookmarks[lastVideoId].length === 0) {
+      const list = (lastVideoId && bookmarks[lastVideoId]) || [];
+
+      if (list.length === 0) {
         bookmarksContainer.innerHTML = `
           <div class="empty-bookmarks">
             <i class="fas fa-bookmark"></i>
-            <p>No bookmarks yet</p>
-            <p>Add bookmarks to jump to key moments</p>
-          </div>
-        `;
+            <p>No bookmarks or sections yet</p>
+            <p>Press B to bookmark, or save a loop as a section</p>
+          </div>`;
         return;
       }
-      
-      bookmarks[lastVideoId].forEach(bookmark => {
-        const bookmarkEl = document.createElement('div');
-        bookmarkEl.className = 'bookmark-item';
-        bookmarkEl.innerHTML = `
-          <div class="bookmark-time">${formatTime(bookmark.time)}</div>
-          <div class="bookmark-details">
-            <input type="text" class="bookmark-title" value="${bookmark.title}" 
-              data-id="${bookmark.id}" placeholder="Bookmark title">
-          </div>
-          <div class="bookmark-actions">
-            <button class="bookmark-btn play-bookmark" data-id="${bookmark.id}" title="Jump to Bookmark">
-              <i class="fas fa-play"></i>
-            </button>
-            <button class="bookmark-btn delete-bookmark" data-id="${bookmark.id}" title="Delete Bookmark">
-              <i class="fas fa-trash"></i>
-            </button>
-          </div>
-        `;
-        
-        bookmarksContainer.appendChild(bookmarkEl);
+
+      list.forEach(bm => {
+        const item = document.createElement('div');
+        item.className = 'bookmark-item' + (bm.type === 'range' ? ' section-item' : '');
+        if (bm.type === 'range') {
+          item.innerHTML = `
+            <div class="bookmark-time"><i class="fas fa-repeat"></i> ${formatTime(bm.start)}–${formatTime(bm.end)}</div>
+            <div class="bookmark-details">
+              <input type="text" class="bookmark-title" value="${escapeAttr(bm.title)}" data-id="${bm.id}" placeholder="Section name">
+              <input type="text" class="section-note" value="${escapeAttr(bm.note || '')}" data-id="${bm.id}" placeholder="Notes (e.g. watch the arm)…">
+            </div>
+            <div class="bookmark-actions">
+              <button class="bookmark-btn loop-section" data-id="${bm.id}" title="Loop this section"><i class="fas fa-repeat"></i></button>
+              <button class="bookmark-btn play-bookmark" data-id="${bm.id}" data-seek="${bm.start}" title="Jump to start"><i class="fas fa-play"></i></button>
+              <button class="bookmark-btn delete-bookmark" data-id="${bm.id}" title="Delete"><i class="fas fa-trash"></i></button>
+            </div>`;
+        } else {
+          item.innerHTML = `
+            <div class="bookmark-time">${formatTime(bm.time)}</div>
+            <div class="bookmark-details">
+              <input type="text" class="bookmark-title" value="${escapeAttr(bm.title)}" data-id="${bm.id}" placeholder="Bookmark title">
+            </div>
+            <div class="bookmark-actions">
+              <button class="bookmark-btn play-bookmark" data-id="${bm.id}" data-seek="${bm.time}" title="Jump to bookmark"><i class="fas fa-play"></i></button>
+              <button class="bookmark-btn delete-bookmark" data-id="${bm.id}" title="Delete"><i class="fas fa-trash"></i></button>
+            </div>`;
+        }
+        bookmarksContainer.appendChild(item);
       });
-      
-      // Add event listeners
-      document.querySelectorAll('.play-bookmark').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          const bookmarkId = btn.dataset.id;
-          const bookmark = bookmarks[lastVideoId].find(b => b.id === bookmarkId);
-          if (bookmark) {
-            video.currentTime = bookmark.time;
-          }
-        });
-      });
-      
-      document.querySelectorAll('.delete-bookmark').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          const bookmarkId = btn.dataset.id;
-          removeBookmark(bookmarkId);
-        });
-      });
-      
-      document.querySelectorAll('.bookmark-title').forEach(input => {
-        input.addEventListener('change', (e) => {
-          const bookmarkId = input.dataset.id;
-          const newTitle = input.value.trim() || `Bookmark (${formatTime(bookmarks[lastVideoId].find(b => b.id === bookmarkId).time)})`;
-          
-          bookmarks[lastVideoId] = bookmarks[lastVideoId].map(b => 
-            b.id === bookmarkId ? {...b, title: newTitle} : b
-          );
-          
+
+      bookmarksContainer.querySelectorAll('.loop-section').forEach(btn =>
+        btn.addEventListener('click', () => loopSection(btn.dataset.id)));
+      bookmarksContainer.querySelectorAll('.play-bookmark').forEach(btn =>
+        btn.addEventListener('click', () => { video.currentTime = parseFloat(btn.dataset.seek) || 0; }));
+      bookmarksContainer.querySelectorAll('.delete-bookmark').forEach(btn =>
+        btn.addEventListener('click', () => removeBookmark(btn.dataset.id)));
+      bookmarksContainer.querySelectorAll('.bookmark-title').forEach(input =>
+        input.addEventListener('change', () => {
+          const id = input.dataset.id;
+          const val = input.value.trim();
+          bookmarks[lastVideoId] = bookmarks[lastVideoId].map(b => b.id === id ? { ...b, title: val || b.title } : b);
           saveBookmarks();
-        });
-      });
+          renderBookmarks();
+        }));
+      bookmarksContainer.querySelectorAll('.section-note').forEach(input =>
+        input.addEventListener('change', () => {
+          const id = input.dataset.id;
+          bookmarks[lastVideoId] = bookmarks[lastVideoId].map(b => b.id === id ? { ...b, note: input.value } : b);
+          saveBookmarks();
+        }));
     }
 
     // Add this after the bookmark functions
@@ -3329,6 +4065,8 @@ body {
 
     // Connect the new bookmark button
     bookmarkBtn.addEventListener('click', addBookmark);
+    // Save current loop as a named section
+    document.getElementById('saveSectionBtn').addEventListener('click', addSection);
     
     // Clear all bookmarks for current video
     clearBookmarksBtn.addEventListener('click', () => {
@@ -3357,14 +4095,34 @@ body {
     // Playback bar functionality
     video.addEventListener('loadedmetadata', () => {
       durationLabel.textContent = formatTime(video.duration);
-      loopStartTime = 0;
-      loopEndTime = Math.min(video.duration * 0.95, 10);
-      
+
+      // Keep the per-video loop region if looping was remembered for this video;
+      // otherwise default to the first ~10s.
+      if (isLoopMode) {
+        loopStartTime = Math.min(loopStartTime || 0, video.duration);
+        loopEndTime = Math.min(loopEndTime || 10, video.duration);
+      } else {
+        loopStartTime = 0;
+        loopEndTime = Math.min(video.duration * 0.95, 10);
+      }
+
       currentBookmarks = bookmarks[lastVideoId] || [];
       renderBookmarks();
       renderBookmarksList();
-      
+
+      // Restore resume position (skip if at/near the end)
+      if (pendingRestorePosition > 0 && pendingRestorePosition < video.duration - 1) {
+        try { video.currentTime = pendingRestorePosition; } catch (e) {}
+      }
+      pendingRestorePosition = 0;
+
+      // Show + start the loop if this video had looping enabled
       if (isLoopMode) {
+        loopRange.style.display = 'block';
+        loopStartHandle.style.display = 'flex';
+        loopEndHandle.style.display = 'flex';
+        loopIndicator.style.display = 'block';
+        loopHighlight.classList.add('active');
         updateLoopRangeDisplay();
         updateLoopIndicator();
         startLoop();
@@ -3375,6 +4133,16 @@ body {
       currentTimeLabel.textContent = formatTime(video.currentTime);
       const percent = video.duration ? (video.currentTime / video.duration) * 100 : 0;
       playbackProgress.style.width = percent + '%';
+
+      // Persist resume position at most every ~5s (avoid hammering the prefs file).
+      if (lastVideoId && video.duration && !video.paused) {
+        const now = Date.now();
+        if (now - lastPositionSave > 5000) {
+          lastPositionSave = now;
+          saveVideoState(lastVideoId);
+          if (stateManager) stateManager.saveStateSoon();
+        }
+      }
     });
 
     // Improved seeker dragging
@@ -3419,54 +4187,54 @@ body {
         // Replace the current loop handle dragging functions with this corrected version
     let currentDraggedHandle = null; // Track which handle is being dragged
 
-    loopStartHandle.addEventListener('mousedown', (e) => {
-      e.stopPropagation();
-      isDraggingLoopHandle = true;
-      currentDraggedHandle = 'start';
-      
-      if (!isLoopMode) toggleLoopMode();
-      
-      document.addEventListener('mousemove', dragLoopHandle);
-      document.addEventListener('mouseup', stopDragLoopHandle);
-    });
+    loopStartHandle.addEventListener('mousedown', (e) => startHandleDrag(e, 'start'));
+    loopEndHandle.addEventListener('mousedown', (e) => startHandleDrag(e, 'end'));
 
-    loopEndHandle.addEventListener('mousedown', (e) => {
+    function startHandleDrag(e, which) {
       e.stopPropagation();
+      e.preventDefault();
       isDraggingLoopHandle = true;
-      currentDraggedHandle = 'end';
-      
-      if (!isLoopMode) toggleLoopMode();
-      
+      currentDraggedHandle = which;
+      // Pause the seamless loop so it doesn't yank playback to the start while dragging.
+      stopLoop();
+      document.body.style.userSelect = 'none';
+      (which === 'start' ? loopStartHandle : loopEndHandle).classList.add('dragging');
       document.addEventListener('mousemove', dragLoopHandle);
       document.addEventListener('mouseup', stopDragLoopHandle);
-    });
+    }
 
     function dragLoopHandle(e) {
       if (!isDraggingLoopHandle || !video.duration) return;
-      
+
       const rect = playbackBar.getBoundingClientRect();
       const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
-      const percent = (x / rect.width) * 100;
-      const time = (percent / 100) * video.duration;
-      
+      const time = (x / rect.width) * video.duration;
+
       if (currentDraggedHandle === 'start') {
         loopStartTime = Math.max(0, Math.min(loopEndTime - 0.1, time));
+        video.currentTime = loopStartTime; // live-preview the in-point frame
       } else if (currentDraggedHandle === 'end') {
         loopEndTime = Math.min(video.duration, Math.max(loopStartTime + 0.1, time));
+        video.currentTime = loopEndTime;   // live-preview the out-point frame
       }
-      
+
+      // Cheap visual updates only; persistence + loop restart happen on mouseup.
       updateLoopRangeDisplay();
       updateLoopIndicator();
-      saveUserPreferences();
-      
-      if (isLoopMode) startLoop();
     }
 
     function stopDragLoopHandle() {
+      if (!isDraggingLoopHandle) return;
       isDraggingLoopHandle = false;
       currentDraggedHandle = null;
+      document.body.style.userSelect = '';
+      loopStartHandle.classList.remove('dragging');
+      loopEndHandle.classList.remove('dragging');
       document.removeEventListener('mousemove', dragLoopHandle);
       document.removeEventListener('mouseup', stopDragLoopHandle);
+      loopRepCount = 0;
+      saveUserPreferences();        // persist the new region once
+      if (isLoopMode) startLoop();  // resume looping with the new bounds
     }
 
     class AppStateManager {
@@ -3489,8 +4257,10 @@ body {
           
           // User data
           savedVideos: [],
+          recentVideos: [], // recently played [{id,title,thumbnail,at}]
           bookmarks: {}, // Stores bookmarks by videoId
-          
+          videos: {},    // Per-video settings keyed by videoId
+
           // UI state
           lastSearchQuery: '',
           
@@ -3515,12 +4285,14 @@ body {
           
           // Merge with current state (with validation)
           if (savedState) {
-            this.state = { 
+            this.state = {
               ...this.state,
               ...savedState,
               // Ensure arrays/objects exist
               savedVideos: savedState.savedVideos || [],
-              bookmarks: savedState.bookmarks || {}
+              recentVideos: savedState.recentVideos || [],
+              bookmarks: savedState.bookmarks || {},
+              videos: savedState.videos || {}
             };
           }
           
@@ -3543,35 +4315,14 @@ body {
 
       // Apply loaded state to the UI
       applyStateToUI() {
-        // Restore video player settings
+        // Theme
+        applyTheme(this.state.theme);
+
+        // Global volume only — per-video speed/loop/mirror are applied when a video loads.
         if (video) {
-          video.volume = this.state.volume || 1;
-          video.playbackRate = this.state.playbackRate || 1;
-          
-          if (volumeSlider) volumeSlider.value = this.state.volume || 1;
-          if (speedBtn) speedBtn.textContent = `${this.state.playbackRate || 1}x`;
-          
+          video.volume = this.state.volume != null ? this.state.volume : 1;
+          if (volumeSlider) volumeSlider.value = video.volume;
           updateVolumeIcon();
-        }
-
-        // Restore loop settings
-        if (this.state.loopMode) {
-          isLoopMode = true;
-          loopStartTime = this.state.loopStartTime || 0;
-          loopEndTime = this.state.loopEndTime || 10;
-          
-          if (loopBtn) loopBtn.classList.add('active');
-          if (loopRange) loopRange.style.display = 'block';
-          if (loopStartHandle) loopStartHandle.style.display = 'flex';
-          if (loopEndHandle) loopEndHandle.style.display = 'flex';
-          if (loopIndicator) loopIndicator.style.display = 'block';
-          if (loopHighlight) loopHighlight.classList.add('active');
-        }
-
-        // Restore mirror mode
-        if (this.state.mirrorMode) {
-          if (video) video.classList.add('mirror-video');
-          if (mirrorBtn) mirrorBtn.classList.add('active');
         }
 
         // Restore search query
@@ -3579,108 +4330,88 @@ body {
           searchQuery.value = this.state.lastSearchQuery;
         }
 
-        // Restore saved videos
-        if (this.state.savedVideos) {
+        // Restore saved videos (migrate cookie-seeded data if Electron prefs are empty)
+        if (this.state.savedVideos && this.state.savedVideos.length) {
           savedVideos = this.state.savedVideos;
-          updateSavedVideos();
+        } else {
+          this.state.savedVideos = savedVideos;
         }
+        updateSavedVideos();
 
-        // Restore bookmarks
-        if (this.state.bookmarks) {
+        // Restore bookmarks (same migration fallback)
+        if (this.state.bookmarks && Object.keys(this.state.bookmarks).length) {
           bookmarks = this.state.bookmarks;
-          renderBookmarks();
-          renderBookmarksList();
+        } else {
+          this.state.bookmarks = bookmarks;
         }
+        renderBookmarks();
+        renderBookmarksList();
 
-        // Restore last video if available
+        // Restore the last video if available (per-video settings apply via the load path)
         if (this.state.currentVideoId && this.state.currentVideoId !== 'null') {
           this.restoreLastVideo();
         }
       }
 
-      // Restore the last video that was playing
+      // Restore the last video that was playing — reuse the normal load path so speed,
+      // mirror, loop region and resume position are restored exactly like any other open.
       async restoreLastVideo() {
         try {
           console.log('🎬 Restoring last video:', this.state.currentVideoId);
-          
-          lastVideoId = this.state.currentVideoId;
-          lastVideoTitle = this.state.currentVideoTitle || 'Restored Video';
-          lastThumbnail = this.state.currentThumbnail || '';
-          
-          // Set video title
-          if (videoTitle) {
-            videoTitle.textContent = lastVideoTitle;
-            videoTitle.style.display = 'block';
-          }
-
-          // Try to download and load the video
-          const data = await window.electronAPI.downloadVideo(lastVideoId);
-          if (data.url && video) {
-            video.src = data.url;
-            video.load();
-            
-            // Restore playback position after video loads
-            video.addEventListener('loadedmetadata', () => {
-              if (this.state.currentTime && this.state.currentTime > 0) {
-                video.currentTime = Math.min(this.state.currentTime, video.duration);
-              }
-              
-              // Update bookmarks for this video
-              currentBookmarks = bookmarks[lastVideoId] || [];
-              renderBookmarks();
-              renderBookmarksList();
-              
-              // Update loop display if in loop mode
-              if (isLoopMode) {
-                updateLoopRangeDisplay();
-                updateLoopIndicator();
-              }
-            }, { once: true });
-          }
+          const id = this.state.currentVideoId;
+          const meta = (this.state.videos && this.state.videos[id]) || {};
+          lastVideoId = id;
+          lastVideoTitle = this.state.currentVideoTitle || meta.title || 'Restored Video';
+          lastThumbnail = this.state.currentThumbnail || meta.thumbnail || '';
+          await downloadAndPlay(id, { autoplay: false });
         } catch (error) {
           console.warn('⚠️ Could not restore last video:', error.message);
         }
       }
 
-      // Get current app state
+      // Snapshot the canonical state to persist. Per-video settings live in `videos`;
+      // top-level speed/loop/mirror stay as global DEFAULTS (intentionally not written here).
       getCurrentState() {
+        if (lastVideoId) saveVideoState(lastVideoId);
         return {
-          // Video state
+          // Video state (for resuming the last-open video)
           currentVideoId: lastVideoId,
           currentVideoTitle: lastVideoTitle,
           currentThumbnail: lastThumbnail,
           currentTime: video ? video.currentTime : 0,
           isPlaying: video ? !video.paused : false,
-          
-          // Player settings
+
+          // Global settings
           volume: video ? video.volume : 1,
-          playbackRate: video ? video.playbackRate : 1,
-          loopMode: isLoopMode,
-          loopStartTime: loopStartTime,
-          loopEndTime: loopEndTime,
-          mirrorMode: video ? video.classList.contains('mirror-video') : false,
-          
-          // User data
-          savedVideos: savedVideos,
-          bookmarks: bookmarks,
-          
-          // UI state
           lastSearchQuery: searchQuery ? searchQuery.value : '',
-          
+
+          // Per-video + user data
+          videos: this.state.videos || {},
+          savedVideos: savedVideos,
+          recentVideos: this.state.recentVideos || [],
+          bookmarks: bookmarks,
+
           // Session data
           practiceTime: Date.now() - this.state.sessionStartTime
         };
       }
 
-      // Save current state
+      // Save current state immediately
       async saveState() {
         try {
           const currentState = this.getCurrentState();
+          // keep in-memory state in sync so subsequent reads see the latest
+          Object.assign(this.state, currentState);
           await window.electronAPI.updatePreferences(currentState);
-          console.log('💾 App state saved');
         } catch (error) {
           console.warn('⚠️ Could not save state:', error);
         }
+      }
+
+      // Debounced save — coalesces frequent control changes into one write (~600ms).
+      saveStateSoon() {
+        clearTimeout(this._saveTimer);
+        this._saveTimer = setTimeout(() => this.saveState(), 600);
       }
 
       // Set up auto-save every 30 seconds
@@ -3693,7 +4424,9 @@ body {
         // Save state every 30 seconds
         this.autoSaveInterval = setInterval(() => {
           this.saveState();
+          this.updateStatsFooter();
         }, 30000);
+        this.updateStatsFooter();
 
         // Save state when page visibility changes
         document.addEventListener('visibilitychange', () => {
@@ -3705,6 +4438,7 @@ body {
         // Save state before page unload
         window.addEventListener('beforeunload', () => {
           this.saveState();
+          this.saveSession();
         });
       }
 
@@ -3720,7 +4454,27 @@ body {
         window.electronAPI.onAppClosing(() => {
           console.log('👋 App is closing, saving final state...');
           this.saveState();
+          this.saveSession();
         });
+      }
+
+      // Record this session's practice time once (accrues totalPracticeTime/sessionCount).
+      saveSession() {
+        if (this._sessionSaved) return;
+        this._sessionSaved = true;
+        try { window.electronAPI.saveSessionData({ lastVideoId, lastVideoTitle }); } catch (e) {}
+      }
+
+      // Show accumulated practice stats in the footer.
+      updateStatsFooter() {
+        const el = document.getElementById('footerStats');
+        if (!el) return;
+        const total = (this.state.totalPracticeTime || 0) + (Date.now() - this.state.sessionStartTime);
+        const mins = Math.floor(total / 60000);
+        const h = Math.floor(mins / 60), m = mins % 60;
+        const sessions = (this.state.sessionCount || 0) + 1;
+        const t = h > 0 ? `${h}h ${m}m` : `${m}m`;
+        el.textContent = `⏱ Practiced ${t} over ${sessions} session${sessions === 1 ? '' : 's'} · Stepwise Studio`;
       }
 
       // Clean up
@@ -3735,25 +4489,11 @@ body {
       }
     }
 
-    // Initialize the state manager
-    const stateManager = new AppStateManager();
+    // Initialize the state manager (single source of truth)
+    stateManager = new AppStateManager();
     document.addEventListener('DOMContentLoaded', () => {
       stateManager.initialize();
     });
-      
-    updateLoopRangeDisplay();
-    updateLoopIndicator();
-    saveUserPreferences();
-    
-    if (isLoopMode) {
-      startLoop();
-    }
-
-    function stopDragLoopHandle() {
-      isDraggingLoopHandle = false;
-      document.removeEventListener('mousemove', dragLoopHandle);
-      document.removeEventListener('mouseup', stopDragLoopHandle);
-    }
 
     // Format time as mm:ss
     function formatTime(sec) {
@@ -3763,9 +4503,7 @@ body {
       return `${m}:${s.toString().padStart(2, '0')}`;
     }
 
-    // Auto-save preferences
-    video.addEventListener('volumechange', saveUserPreferences);
-    video.addEventListener('ratechange', saveUserPreferences);
+    // (Volume/speed changes are already persisted by their explicit control handlers.)
 
     // Welcome message for first-time users
     if (!getCookie('stepwiseWelcome')) {
@@ -3820,6 +4558,297 @@ body {
       // Make sure video click area covers the whole vide
       const videoContainer = document.querySelector('.video-container');
     });
+
+    // ============================================================================
+    // AI DANCE COACH (Phase 6): webcam + on-device pose comparison + Gemini tips
+    // Opt-in. All heavy work (pose estimation, comparison) runs locally/free;
+    // Gemini only turns the pose-diff into words. Degrades gracefully without a
+    // camera, without internet (no MediaPipe), or without an API key.
+    // ============================================================================
+    (function setupCoach() {
+      // ---- inject styles ----
+      const style = document.createElement('style');
+      style.textContent = `
+        .coach-toggle { position: fixed; top: 14px; right: 64px; z-index: 3000;
+          width: 40px; height: 40px; border-radius: 50%; border: 2px solid #e8e2d4;
+          background: #faf8f5; color: #7a8b5e; cursor: pointer; font-size: 1rem;
+          box-shadow: 0 4px 14px rgba(138,155,110,0.25); transition: transform .15s ease; }
+        .coach-toggle:hover { transform: scale(1.08); background: #f0ece4; }
+        .coach-panel { position: fixed; right: 16px; bottom: 16px; z-index: 3500; width: 380px;
+          max-width: 92vw; background: #faf8f5; border: 2px solid #e8e2d4; border-radius: 18px;
+          box-shadow: 0 18px 50px rgba(55,65,81,0.35); display: none; overflow: hidden;
+          font-family: 'Poppins', sans-serif; color: #374151; }
+        .coach-panel.open { display: block; }
+        .coach-header { display: flex; justify-content: space-between; align-items: center;
+          padding: 12px 16px; background: #8a9b6e; color: #fff; font-family: 'Comfortaa', cursive; }
+        .coach-header button { background: transparent; border: none; color: #fff; font-size: 1rem; cursor: pointer; }
+        .coach-body { padding: 14px 16px; }
+        .coach-cam-wrap { position: relative; width: 100%; aspect-ratio: 4/3; background: #1f2226;
+          border-radius: 12px; overflow: hidden; margin-bottom: 12px; }
+        .coach-cam-wrap video, .coach-cam-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%;
+          object-fit: cover; transform: scaleX(-1); }
+        .coach-score { position: absolute; top: 8px; left: 8px; background: rgba(55,65,81,0.75); color: #fff;
+          padding: 3px 10px; border-radius: 10px; font-weight: 700; font-size: .9rem; }
+        .coach-status { font-size: .85rem; color: #6b7280; margin-bottom: 8px; }
+        .coach-feedback { font-size: .85rem; line-height: 1.45; margin-bottom: 10px; white-space: pre-wrap; max-height: 120px; overflow-y: auto; }
+        .coach-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .coach-btn { background: #8a9b6e; color: #fff; border: none; border-radius: 14px; padding: 7px 12px;
+          font-size: .82rem; cursor: pointer; font-family: 'Poppins', sans-serif; }
+        .coach-btn:hover { background: #7a8b5e; }
+        .coach-btn.ghost { background: #f0ece4; color: #6b7280; }
+      `;
+      document.head.appendChild(style);
+
+      // ---- inject UI ----
+      const toggle = document.createElement('button');
+      toggle.className = 'coach-toggle';
+      toggle.title = 'AI Dance Coach (webcam)';
+      toggle.innerHTML = '<i class="fas fa-user-check"></i>';
+      document.body.appendChild(toggle);
+
+      const panel = document.createElement('div');
+      panel.className = 'coach-panel';
+      panel.innerHTML = `
+        <div class="coach-header"><span><i class="fas fa-user-check"></i> AI Dance Coach</span>
+          <button id="coachClose" title="Close">✕</button></div>
+        <div class="coach-body">
+          <div class="coach-cam-wrap">
+            <video id="coachCam" autoplay muted playsinline></video>
+            <canvas id="coachCanvas"></canvas>
+            <div class="coach-score" id="coachScore">—</div>
+          </div>
+          <div class="coach-status" id="coachStatus">Play a tutorial, then Start camera to compare your moves.</div>
+          <div class="coach-feedback" id="coachFeedback"></div>
+          <div class="coach-actions">
+            <button class="coach-btn" id="coachStart"><i class="fas fa-video"></i> Start camera</button>
+            <button class="coach-btn" id="coachAdvice"><i class="fas fa-comment-dots"></i> Coach me</button>
+            <button class="coach-btn ghost" id="coachKey">Set Gemini key</button>
+          </div>
+        </div>`;
+      document.body.appendChild(panel);
+
+      const els = {
+        cam: panel.querySelector('#coachCam'),
+        canvas: panel.querySelector('#coachCanvas'),
+        score: panel.querySelector('#coachScore'),
+        status: panel.querySelector('#coachStatus'),
+        feedback: panel.querySelector('#coachFeedback'),
+        start: panel.querySelector('#coachStart'),
+        advice: panel.querySelector('#coachAdvice'),
+        key: panel.querySelector('#coachKey'),
+        close: panel.querySelector('#coachClose')
+      };
+
+      // ---- pose / comparison state ----
+      let camStream = null, camLandmarker = null, tutLandmarker = null, drawer = null;
+      let running = false, rafId = null;
+      let lastScore = null, worstJoints = [];
+      const setStatus = (s) => { els.status.textContent = s; };
+
+      // MediaPipe landmark indices
+      const J = { Lsho:11, Rsho:12, Lelb:13, Relb:14, Lwri:15, Rwri:16, Lhip:23, Rhip:24, Lkne:25, Rkne:26, Lank:27, Rank:28 };
+      const JOINTS = [
+        ['L elbow', J.Lsho, J.Lelb, J.Lwri], ['R elbow', J.Rsho, J.Relb, J.Rwri],
+        ['L shoulder', J.Lelb, J.Lsho, J.Lhip], ['R shoulder', J.Relb, J.Rsho, J.Rhip],
+        ['L hip', J.Lsho, J.Lhip, J.Lkne], ['R hip', J.Rsho, J.Rhip, J.Rkne],
+        ['L knee', J.Lhip, J.Lkne, J.Lank], ['R knee', J.Rhip, J.Rkne, J.Rank]
+      ];
+      function angle(a, b, c) {
+        if (!a || !b || !c) return null;
+        const v1 = { x: a.x - b.x, y: a.y - b.y }, v2 = { x: c.x - b.x, y: c.y - b.y };
+        const dot = v1.x * v2.x + v1.y * v2.y;
+        const m1 = Math.hypot(v1.x, v1.y), m2 = Math.hypot(v2.x, v2.y);
+        if (!m1 || !m2) return null;
+        return Math.acos(Math.max(-1, Math.min(1, dot / (m1 * m2)))) * 180 / Math.PI;
+      }
+      function anglesOf(lm) {
+        const out = {};
+        for (const [name, a, b, c] of JOINTS) {
+          const A = lm[a], B = lm[b], C = lm[c];
+          const visOk = A && B && C && (A.visibility ?? 1) > 0.5 && (B.visibility ?? 1) > 0.5 && (C.visibility ?? 1) > 0.5;
+          out[name] = visOk ? angle(A, B, C) : null;
+        }
+        return out;
+      }
+      function compare(youLm, tutLm) {
+        const ya = anglesOf(youLm), ta = anglesOf(tutLm);
+        const diffs = [];
+        for (const [name] of JOINTS) {
+          if (ya[name] != null && ta[name] != null) diffs.push({ name, d: Math.abs(ya[name] - ta[name]) });
+        }
+        if (!diffs.length) return { score: null, worst: [] };
+        const mean = diffs.reduce((s, x) => s + x.d, 0) / diffs.length;
+        const score = Math.max(0, Math.min(100, Math.round(100 - mean * 0.8)));
+        const worst = diffs.sort((a, b) => b.d - a.d).slice(0, 3).filter(x => x.d > 15);
+        return { score, worst };
+      }
+
+      async function ensureModels() {
+        if (camLandmarker && tutLandmarker) return true;
+        setStatus('Loading pose model…');
+        const vision = await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/vision_bundle.mjs');
+        const { PoseLandmarker, FilesetResolver, DrawingUtils } = vision;
+        const resolver = await FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm');
+        const opts = {
+          baseOptions: { modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task' },
+          runningMode: 'VIDEO', numPoses: 1
+        };
+        camLandmarker = await PoseLandmarker.createFromOptions(resolver, opts);
+        tutLandmarker = await PoseLandmarker.createFromOptions(resolver, opts);
+        const ctx = els.canvas.getContext('2d');
+        drawer = new DrawingUtils(ctx);
+        window.__PoseLandmarker = PoseLandmarker; // for connectors
+        return true;
+      }
+
+      function loop() {
+        if (!running) return;
+        const ctx = els.canvas.getContext('2d');
+        els.canvas.width = els.cam.videoWidth || 320;
+        els.canvas.height = els.cam.videoHeight || 240;
+        ctx.clearRect(0, 0, els.canvas.width, els.canvas.height);
+        let youLm = null, tutLm = null;
+        try {
+          if (els.cam.videoWidth) {
+            const r = camLandmarker.detectForVideo(els.cam, performance.now());
+            youLm = r.landmarks && r.landmarks[0];
+            if (youLm && drawer && window.__PoseLandmarker) {
+              drawer.drawConnectors(youLm, window.__PoseLandmarker.POSE_CONNECTIONS, { color: '#8a9b6e', lineWidth: 3 });
+              drawer.drawLandmarks(youLm, { color: '#fff', radius: 3 });
+            }
+          }
+          if (video && !video.paused && video.videoWidth) {
+            const r2 = tutLandmarker.detectForVideo(video, performance.now() + 1);
+            tutLm = r2.landmarks && r2.landmarks[0];
+          }
+        } catch (e) { /* transient */ }
+
+        if (youLm && tutLm) {
+          const { score, worst } = compare(youLm, tutLm);
+          if (score != null) {
+            lastScore = score; worstJoints = worst;
+            els.score.textContent = score + '%';
+            els.score.style.color = score >= 80 ? '#b7f5b0' : score >= 55 ? '#ffe08a' : '#ffb0b0';
+          }
+        } else {
+          els.score.textContent = tutLm ? 'You: —' : 'Play tutorial';
+        }
+        rafId = requestAnimationFrame(loop);
+      }
+
+      async function startCamera() {
+        if (running) { stopCamera(); return; }
+        try {
+          els.start.disabled = true;
+          camStream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: false });
+          els.cam.srcObject = camStream;
+          await els.cam.play().catch(() => {});
+          await ensureModels();
+          running = true;
+          els.start.innerHTML = '<i class="fas fa-stop"></i> Stop camera';
+          setStatus('Comparing your pose to the tutorial…');
+          loop();
+        } catch (err) {
+          setStatus('Camera/model error: ' + (err.message || err) + ' (needs camera permission + internet for the pose model).');
+        } finally {
+          els.start.disabled = false;
+        }
+      }
+      function stopCamera() {
+        running = false;
+        if (rafId) cancelAnimationFrame(rafId);
+        if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; }
+        els.cam.srcObject = null;
+        els.start.innerHTML = '<i class="fas fa-video"></i> Start camera';
+        setStatus('Camera stopped.');
+      }
+
+      function ruleBasedTips() {
+        if (lastScore == null) return 'Start the camera and play a tutorial to get feedback.';
+        if (!worstJoints.length) return `Great match (${lastScore}%)! Your angles line up well — keep it up.`;
+        const parts = worstJoints.map(w => `• ${w.name}: off by ~${Math.round(w.d)}°`);
+        return `Match ${lastScore}%. Focus on:\n${parts.join('\n')}`;
+      }
+      async function coachMe() {
+        const apiKey = (stateManager && stateManager.state.geminiApiKey) || '';
+        const summary = `match=${lastScore}% worst_joints=${JSON.stringify(worstJoints.map(w => ({ joint: w.name, deg_off: Math.round(w.d) })))}`;
+        if (!apiKey) { els.feedback.textContent = ruleBasedTips() + '\n\n(Set a free Gemini key for natural-language coaching.)'; return; }
+        els.feedback.textContent = 'Asking the coach…';
+        try {
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+          const body = { contents: [{ parts: [{ text: `You are an encouraging dance coach. A learner is mirroring a tutorial. Pose comparison data (angles, degrees off): ${summary}. Give 2-3 short, specific, motivating tips. If match is high, praise them.` }] }] };
+          const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+          const j = await res.json();
+          els.feedback.textContent = j.candidates?.[0]?.content?.parts?.[0]?.text || ('Gemini error: ' + (j.error?.message || 'no response') + '\n\n' + ruleBasedTips());
+        } catch (e) {
+          els.feedback.textContent = 'Could not reach Gemini (' + (e.message || e) + ').\n\n' + ruleBasedTips();
+        }
+      }
+
+      // ---- wire UI ----
+      toggle.addEventListener('click', () => panel.classList.toggle('open'));
+      els.close.addEventListener('click', () => { panel.classList.remove('open'); });
+      els.start.addEventListener('click', startCamera);
+      els.advice.addEventListener('click', coachMe);
+      els.key.addEventListener('click', () => {
+        const cur = (stateManager && stateManager.state.geminiApiKey) || '';
+        const k = prompt('Paste your free Gemini API key (from aistudio.google.com). Leave blank to clear:', cur);
+        if (k === null) return;
+        if (stateManager) { stateManager.state.geminiApiKey = k.trim(); stateManager.saveStateSoon(); }
+        flashNotification(k.trim() ? 'Gemini key saved' : 'Gemini key cleared');
+      });
+      window.addEventListener('beforeunload', stopCamera);
+    })();
+
+    // ============================================================================
+    // MIRROR SIDE-BY-SIDE: a synced, mirrored copy of the tutorial in the corner,
+    // so you can watch the normal and mirrored versions at the same time.
+    // ============================================================================
+    (function setupMirrorPip() {
+      const container = document.querySelector('.video-container');
+      if (!container) return;
+      const style = document.createElement('style');
+      style.textContent = `
+        .mirror-pip-toggle { position: absolute; top: 10px; left: 10px; z-index: 30; width: 34px; height: 34px;
+          border-radius: 50%; border: none; background: rgba(55,65,81,0.6); color: #fff; cursor: pointer; font-size: .9rem; }
+        .mirror-pip-toggle:hover { background: rgba(55,65,81,0.85); }
+        .mirror-pip-toggle.active { background: #8a9b6e; }
+        .mirror-pip { position: absolute; bottom: 64px; right: 12px; width: 32%; max-width: 280px; aspect-ratio: 16/9;
+          transform: scaleX(-1); border: 2px solid #8a9b6e; border-radius: 10px; z-index: 29; object-fit: cover;
+          background: #000; box-shadow: 0 6px 20px rgba(0,0,0,0.5); }
+      `;
+      document.head.appendChild(style);
+
+      const btn = document.createElement('button');
+      btn.className = 'mirror-pip-toggle';
+      btn.title = 'Mirror side-by-side';
+      btn.innerHTML = '<i class="fas fa-clone"></i>';
+      container.appendChild(btn);
+
+      let pip = null, timer = null;
+      function sync() {
+        if (!pip) return;
+        const src = video.currentSrc || video.src;
+        if (src && pip.src !== src) pip.src = src;
+        if (Math.abs((pip.currentTime || 0) - video.currentTime) > 0.25) pip.currentTime = video.currentTime;
+        pip.playbackRate = video.playbackRate;
+        if (video.paused) pip.pause(); else pip.play().catch(() => {});
+      }
+      btn.addEventListener('click', () => {
+        if (pip) { pip.remove(); pip = null; clearInterval(timer); timer = null; btn.classList.remove('active'); return; }
+        pip = document.createElement('video');
+        pip.className = 'mirror-pip';
+        pip.muted = true; pip.playsInline = true;
+        pip.src = video.currentSrc || video.src;
+        container.appendChild(pip);
+        pip.currentTime = video.currentTime;
+        pip.playbackRate = video.playbackRate;
+        if (!video.paused) pip.play().catch(() => {});
+        timer = setInterval(sync, 300);
+        btn.classList.add('active');
+      });
+      ['seeked', 'play', 'pause', 'ratechange'].forEach(ev => video.addEventListener(ev, sync));
+    })();
   </script>
 </body>
 </html>
