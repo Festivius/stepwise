@@ -4833,7 +4833,7 @@ body {
         if (!apiKey) { els.feedback.textContent = ruleBasedTips() + '\n\n(Set a free Gemini key for natural-language coaching.)'; return; }
         els.feedback.textContent = 'Asking the coach…';
         try {
-          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
           const body = { contents: [{ parts: [{ text: `You are an encouraging dance coach. A learner is mirroring a tutorial. Pose comparison data (angles, degrees off): ${summary}. Give 2-3 short, specific, motivating tips. If match is high, praise them.` }] }] };
           const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
           const j = await res.json();
