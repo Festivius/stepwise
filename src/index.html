@@ -1779,8 +1779,62 @@
         /* Neutral chips/tabs keep accent green for the active one */
         body.dark-theme .library-tab { background: #333941 !important; color: #c7ccd3 !important; }
         body.dark-theme .library-tab.active { background: #8a9b6e !important; color: #fff !important; }
-        body.dark-theme .theme-toggle,
-        body.dark-theme .coach-toggle { background: #262a30; border-color: #3a3f47; color: #b7c79a; }
+        body.dark-theme .theme-toggle { background: #262a30; border-color: #3a3f47; color: #b7c79a; }
+
+        /* ===================== UX polish pass ===================== */
+        /* Toast: pill with accent + springy pop */
+        .save-notification {
+          background: linear-gradient(135deg,#ffffff,#faf8f5);
+          border: 1px solid #e8e2d4; border-left: 4px solid #8a9b6e;
+          box-shadow: 0 12px 32px rgba(55,65,81,0.18);
+          padding: 13px 24px; font-weight: 600; letter-spacing: .2px;
+          animation: toastPop 2.6s cubic-bezier(.22,1.2,.36,1) forwards;
+        }
+        @keyframes toastPop {
+          0% { opacity:0; transform: translateX(-50%) translateY(-26px) scale(.9); }
+          12% { opacity:1; transform: translateX(-50%) translateY(0) scale(1); }
+          85% { opacity:1; transform: translateX(-50%) translateY(0) scale(1); }
+          100% { opacity:0; transform: translateX(-50%) translateY(-14px) scale(.96); }
+        }
+        body.dark-theme .save-notification { background: linear-gradient(135deg,#2a2f36,#23272d); color:#e7e7e2; border-color:#3a3f47; }
+
+        /* Control buttons: springier hover, press, active glow */
+        .control-btn { transition: background .18s ease, transform .12s cubic-bezier(.34,1.56,.64,1), color .18s ease, box-shadow .18s ease; }
+        .control-btn:hover { background: rgba(255,255,255,0.16); transform: scale(1.14); }
+        .control-btn:active, .speed-control:active { transform: scale(0.9); }
+        .control-btn.active { color:#cde0a8; background: rgba(138,155,110,0.22);
+          box-shadow: 0 0 0 1px rgba(138,155,110,.45), 0 0 14px rgba(138,155,110,.5); }
+
+        /* Keyboard-shortcut tooltip on controls */
+        .control-btn[data-tip]:hover::after, .speed-control[data-tip]:hover::after {
+          content: attr(data-tip); position:absolute; bottom:128%; left:50%; transform: translateX(-50%);
+          background:#374151; color:#fff; font-size:11px; font-family:'Poppins',sans-serif; white-space:nowrap;
+          padding:4px 9px; border-radius:7px; pointer-events:none; z-index:50; box-shadow:0 4px 12px rgba(0,0,0,.3);
+          animation: tipIn .14s ease; }
+        @keyframes tipIn { from { opacity:0; transform: translateX(-50%) translateY(3px); } to { opacity:1; transform: translateX(-50%) translateY(0); } }
+
+        /* Result cards: smoother lift + hover play overlay */
+        .video-item { transition: transform .28s cubic-bezier(.34,1.4,.5,1), box-shadow .28s ease, border-color .2s ease; }
+        .video-item:hover { transform: translateY(-7px) scale(1.012); }
+        .video-item .play-overlay { position:absolute; top:0; left:0; right:0; height:140px; display:flex;
+          align-items:center; justify-content:center; opacity:0; transition: opacity .25s ease; pointer-events:none;
+          background: linear-gradient(180deg, rgba(55,65,81,0) 45%, rgba(55,65,81,.4)); }
+        .video-item:hover .play-overlay { opacity:1; }
+        .video-item .play-overlay i { color:#fff; font-size:2.4rem; filter: drop-shadow(0 2px 8px rgba(0,0,0,.55));
+          transform: scale(.78); transition: transform .25s cubic-bezier(.34,1.56,.64,1); }
+        .video-item:hover .play-overlay i { transform: scale(1); }
+
+        /* Saved/offline rows: subtle slide on hover */
+        .saved-video { transition: background .18s ease, transform .15s ease, box-shadow .18s ease; }
+        .saved-video:hover { transform: translateX(4px); box-shadow: -4px 0 0 0 rgba(138,155,110,.5); }
+
+        /* Player fades in when a new video is ready */
+        #videoPlayer.video-loaded { animation: videoFade .5s ease; }
+        @keyframes videoFade { from { opacity:.0; } to { opacity:1; } }
+
+        /* Tactile press bump on controls */
+        @keyframes bump { 0%{transform:scale(1)} 35%{transform:scale(1.3)} 100%{transform:scale(1)} }
+        .control-btn.bumped, .speed-control.bumped { animation: bump .32s cubic-bezier(.34,1.56,.64,1); }
 
         /* 3. Improved bookmark layout */
         .bookmarks-section {
@@ -2874,6 +2928,7 @@ body {
           div.className = 'video-item';
           div.innerHTML = `
             <img src="${thumbnail}" alt="${title}" loading="lazy">
+            <div class="play-overlay"><i class="fas fa-play"></i></div>
             <strong>${title}</strong>
             <button class="save-btn ${isSaved ? 'saved' : ''}" data-id="${videoId}" aria-label="${isSaved ? 'Unsave' : 'Save'} this video">
               <!-- Changed to heart icon -->
@@ -3872,6 +3927,15 @@ body {
     skipBackBtn.addEventListener('click', () => skipVideo(-5));
     skipForwardBtn.addEventListener('click', () => skipVideo(5));
     searchBtn.addEventListener('click', searchYouTube);
+
+    // Hover tooltips that reveal the keyboard shortcut for each control
+    [['playPauseBtn','Play / Pause (Space)'],['skipBackBtn','Back 5s (←)'],['skipForwardBtn','Forward 5s (→)'],
+     ['loopBtn','Loop (L)'],['mirrorBtn','Mirror (M)'],['fullscreenBtn','Fullscreen (F)'],['bookmarkBtn','Bookmark (B)'],
+     ['speedBtn','Speed (− / =)'],['volumeBtn','Mute / unmute'],['saveBtn','Save video']].forEach(([id,tip])=>{
+      const el=document.getElementById(id); if(!el) return;
+      el.setAttribute('data-tip',tip);
+      el.addEventListener('click', () => { el.classList.remove('bumped'); void el.offsetWidth; el.classList.add('bumped'); });
+    });
     searchQuery.addEventListener('keypress', (e) => e.key === 'Enter' && searchYouTube());
 
     // Volume control
@@ -4131,6 +4195,8 @@ body {
     // Playback bar functionality
     video.addEventListener('loadedmetadata', () => {
       durationLabel.textContent = formatTime(video.duration);
+      // retrigger the fade-in each time a new video is ready
+      video.classList.remove('video-loaded'); void video.offsetWidth; video.classList.add('video-loaded');
 
       // Keep the per-video loop region if looping was remembered for this video;
       // otherwise default to the first ~10s.
@@ -4427,10 +4493,6 @@ body {
           recentVideos: this.state.recentVideos || [],
           bookmarks: bookmarks,
 
-          // Coach (durable so the key + channel prefs survive restarts)
-          geminiApiKey: this.state.geminiApiKey || '',
-          coachPrefs: this.state.coachPrefs || {},
-
           // Session data
           practiceTime: Date.now() - this.state.sessionStartTime
         };
@@ -4599,707 +4661,6 @@ body {
       const videoContainer = document.querySelector('.video-container');
     });
 
-    // ============================================================================
-    // AI DANCE COACH (Phase 6): webcam + on-device pose comparison + Gemini tips
-    // Opt-in. All heavy work (pose estimation, comparison) runs locally/free;
-    // Gemini only turns the pose-diff into words. Degrades gracefully without a
-    // camera, without internet (no MediaPipe), or without an API key.
-    // ============================================================================
-    (function setupCoach() {
-      // ---- inject styles ----
-      const style = document.createElement('style');
-      style.textContent = `
-        .coach-toggle { position: fixed; top: 14px; right: 64px; z-index: 3000;
-          width: 40px; height: 40px; border-radius: 50%; border: 2px solid #e8e2d4;
-          background: #faf8f5; color: #7a8b5e; cursor: pointer; font-size: 1rem;
-          box-shadow: 0 4px 14px rgba(138,155,110,0.25); transition: transform .15s ease; }
-        .coach-toggle:hover { transform: scale(1.08); background: #f0ece4; }
-        .coach-panel { position: fixed; right: 16px; bottom: 16px; z-index: 3500; width: 380px;
-          max-width: 92vw; background: #faf8f5; border: 2px solid #e8e2d4; border-radius: 18px;
-          box-shadow: 0 18px 50px rgba(55,65,81,0.35); display: none; overflow: hidden;
-          font-family: 'Poppins', sans-serif; color: #374151; }
-        .coach-panel.open { display: block; }
-        .coach-header { display: flex; justify-content: space-between; align-items: center;
-          padding: 12px 16px; background: #8a9b6e; color: #fff; font-family: 'Comfortaa', cursive; }
-        .coach-header button { background: transparent; border: none; color: #fff; font-size: 1rem; cursor: pointer; }
-        .coach-body { padding: 14px 16px; }
-        .coach-cam-wrap { position: relative; width: 100%; aspect-ratio: 4/3; background: #1f2226;
-          border-radius: 12px; overflow: hidden; margin-bottom: 12px; }
-        .coach-cam-wrap video, .coach-cam-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%;
-          object-fit: cover; transform: scaleX(-1); }
-        .coach-score { position: absolute; top: 8px; left: 8px; background: rgba(55,65,81,0.75); color: #fff;
-          padding: 3px 10px; border-radius: 10px; font-weight: 700; font-size: .9rem; }
-        .coach-status { font-size: .85rem; color: #6b7280; margin-bottom: 8px; }
-        .coach-feedback { font-size: .85rem; line-height: 1.45; margin-bottom: 10px; white-space: pre-wrap; max-height: 120px; overflow-y: auto; }
-        .coach-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-        .coach-btn { background: #8a9b6e; color: #fff; border: none; border-radius: 14px; padding: 7px 12px;
-          font-size: .82rem; cursor: pointer; font-family: 'Poppins', sans-serif; }
-        .coach-btn:hover { background: #7a8b5e; }
-        .coach-btn.ghost { background: #f0ece4; color: #6b7280; }
-        .coach-tut-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 6; }
-      `;
-      document.head.appendChild(style);
-
-      // ---- inject UI ----
-      const toggle = document.createElement('button');
-      toggle.className = 'coach-toggle';
-      toggle.title = 'AI Dance Coach (webcam)';
-      toggle.innerHTML = '<i class="fas fa-user-check"></i>';
-      document.body.appendChild(toggle);
-
-      const panel = document.createElement('div');
-      panel.className = 'coach-panel';
-      panel.innerHTML = `
-        <div class="coach-header"><span><i class="fas fa-user-check"></i> AI Dance Coach</span>
-          <button id="coachClose" title="Close">✕</button></div>
-        <div class="coach-body">
-          <div class="coach-cam-wrap">
-            <video id="coachCam" autoplay muted playsinline></video>
-            <canvas id="coachCanvas"></canvas>
-            <div class="coach-score" id="coachScore">—</div>
-          </div>
-          <div class="coach-status" id="coachStatus">Play a tutorial, then Start camera to compare your moves.</div>
-          <div class="coach-feedback" id="coachFeedback"></div>
-          <div class="coach-actions">
-            <button class="coach-btn" id="coachStart"><i class="fas fa-video"></i> Start camera</button>
-            <button class="coach-btn" id="coachAdvice"><i class="fas fa-comment-dots"></i> Coach me</button>
-            <button class="coach-btn ghost" id="coachKey">Set Gemini key</button>
-          </div>
-        </div>`;
-      document.body.appendChild(panel);
-
-      const els = {
-        cam: panel.querySelector('#coachCam'),
-        canvas: panel.querySelector('#coachCanvas'),
-        score: panel.querySelector('#coachScore'),
-        status: panel.querySelector('#coachStatus'),
-        feedback: panel.querySelector('#coachFeedback'),
-        start: panel.querySelector('#coachStart'),
-        advice: panel.querySelector('#coachAdvice'),
-        key: panel.querySelector('#coachKey'),
-        close: panel.querySelector('#coachClose')
-      };
-
-      // Skeleton overlay canvas on the TUTORIAL video (same overlay as the webcam).
-      const tutCanvas = document.createElement('canvas');
-      tutCanvas.className = 'coach-tut-canvas';
-      tutCanvas.style.display = 'none';
-      const videoContainerEl = document.querySelector('.video-container');
-      if (videoContainerEl) videoContainerEl.appendChild(tutCanvas);
-
-      // ---- pose / comparison state ----
-      let camStream = null, camLandmarker = null, tutLandmarker = null, camHands = null, tutHands = null;
-      let drawer = null, drawer2 = null, POSE_CONN = null, HAND_CONN = null;
-      let running = false, rafId = null;
-      let lastScore = null, lastErrs = [], lastMirror = false, lastLagMs = 0;
-      let coachPrefs = { audio:true, text:true, highlight:true, mirror:'auto' };
-      try { Object.assign(coachPrefs, (stateManager && stateManager.state.coachPrefs) || {}); } catch(e){}
-      const setStatus = (s) => { els.status.textContent = s; };
-
-      // ===== proactive feedback: persistence tracking + 3 channels + throttle =====
-      const persist = {};            // featureId -> {sinceMs, sign}
-      let lastCueAt = 0, lastPraiseAt = 0; const perFeatureCue = {};
-      let redLimb = null, redLimbUntil = 0;
-      const REGION_CONN = {};        // featureId -> pose connection subset (built after models load)
-      function speak(text){
-        if(!coachPrefs.audio || !('speechSynthesis' in window)) return;
-        try { window.speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(text); u.rate=1.05; window.speechSynthesis.speak(u); } catch(e){}
-      }
-      function pushTextCue(text){
-        if(!coachPrefs.text) return;
-        const line=document.createElement('div'); line.textContent='• '+text;
-        els.feedback.prepend(line);
-        while(els.feedback.childNodes.length>6) els.feedback.removeChild(els.feedback.lastChild);
-      }
-      function fireCue(id, text){
-        const now=performance.now();
-        if(now-lastCueAt < 3500) return;
-        if(perFeatureCue[id] && now-perFeatureCue[id] < 6000) return;
-        lastCueAt=now; perFeatureCue[id]=now;
-        speak(text); pushTextCue(text);
-        if(coachPrefs.highlight){ redLimb=id; redLimbUntil=now+3000; }
-      }
-      function proactiveTick(cmp, lagMs){
-        if(!cmp) return;
-        const now=performance.now();
-        // praise when strong
-        if(cmp.score>=85){ if(now-lastPraiseAt>9000){ lastPraiseAt=now; } return; }
-        // timing channel (separate)
-        if(lagMs>260){ fireCue('__timing','you are behind — attack the count'); }
-        else if(lagMs<-160){ fireCue('__timing','you are rushing — wait for the beat'); }
-        // pick the highest-weighted sustained HIGH/MED violation
-        let cand=null;
-        for(const e of cmp.errs){
-          const bad = e.norm>0.32 && (e.pri==='HIGH'||e.pri==='MED');
-          const p = persist[e.id] || (persist[e.id]={sinceMs:0,sign:0,last:now});
-          if(bad && (p.sign===0 || p.sign===Math.sign(e.signed))){ p.sign=Math.sign(e.signed); p.sinceMs += now-p.last; }
-          else { p.sinceMs=0; p.sign=Math.sign(e.signed); }
-          p.last=now;
-          if(bad && p.sinceMs>=1000){ const sc=e.norm*e.w; if(!cand||sc>cand.sc) cand={e,sc}; }
-        }
-        if(cand) fireCue(cand.e.id, cand.e.cue);
-      }
-
-      // ===== MediaPipe pose landmark indices =====
-      const J = { Lsho:11, Rsho:12, Lelb:13, Relb:14, Lwri:15, Rwri:16, Lhip:23, Rhip:24,
-                  Lkne:25, Rkne:26, Lank:27, Rank:28, Lheel:29, Rheel:30, Lfoot:31, Rfoot:32 };
-
-      // ===== vec3 helpers (world landmarks are metric {x,y,z}) =====
-      const V = {
-        sub:(a,b)=>({x:a.x-b.x,y:a.y-b.y,z:(a.z||0)-(b.z||0)}),
-        dot:(a,b)=>a.x*b.x+a.y*b.y+(a.z||0)*(b.z||0),
-        cross:(a,b)=>({x:a.y*(b.z||0)-(a.z||0)*b.y, y:(a.z||0)*b.x-a.x*(b.z||0), z:a.x*b.y-a.y*b.x}),
-        len:a=>Math.hypot(a.x,a.y,a.z||0),
-        norm:a=>{const l=Math.hypot(a.x,a.y,a.z||0)||1e-9;return {x:a.x/l,y:a.y/l,z:(a.z||0)/l};},
-        mid:(a,b)=>({x:(a.x+b.x)/2,y:(a.y+b.y)/2,z:((a.z||0)+(b.z||0))/2})
-      };
-      const angBetween=(a,b)=>Math.acos(Math.max(-1,Math.min(1,V.dot(a,b))))*180/Math.PI;
-      function jointAngle(a,b,c){ if(!a||!b||!c) return null; return angBetween(V.norm(V.sub(a,b)),V.norm(V.sub(c,b))); }
-      const vis=(p)=> p && (p.visibility==null || p.visibility>0.4);
-
-      // ===== Body-centered frame (facing/position/scale invariant) =====
-      function buildBodyFrame(P){
-        const Lh=P[J.Lhip],Rh=P[J.Rhip],Ls=P[J.Lsho],Rs=P[J.Rsho];
-        if(!Lh||!Rh||!Ls||!Rs) return null;
-        const midHip=V.mid(Lh,Rh);
-        const x=V.norm(V.sub(Lh,Rh));               // right->left across hips
-        let y=V.norm(V.sub(V.mid(Ls,Rs),midHip));   // up the spine
-        const z=V.norm(V.cross(x,y));               // forward (out of chest)
-        y=V.norm(V.cross(z,x));                      // re-orthogonalize
-        const scale=V.len(V.sub(Ls,Rs))||0.3;        // shoulder width (m)
-        return {midHip,x,y,z,scale};
-      }
-      const toBody=(p,f)=>{ const d=V.sub(p,f.midHip); return {x:V.dot(d,f.x)/f.scale,y:V.dot(d,f.y)/f.scale,z:V.dot(d,f.z)/f.scale}; };
-
-      // ===== Hand metrics from HandLandmarker result (openness + direction), mapped to body L/R =====
-      function handMetrics(handRes, frame){
-        const out={L:{dir:null,open:null,present:false}, R:{dir:null,open:null,present:false}};
-        if(!handRes||!handRes.landmarks) return out;
-        for(let i=0;i<handRes.landmarks.length;i++){
-          const lm=handRes.landmarks[i];                 // 21 normalized pts
-          // handedness label is mirrored for a selfie webcam; we only need a side bucket
-          const label=(handRes.handedness&&handRes.handedness[i]&&handRes.handedness[i][0]&&handRes.handedness[i][0].categoryName)||'';
-          const side=/left/i.test(label)?'L':'R';
-          const wrist=lm[0], midMcp=lm[9];
-          const dir=wrist&&midMcp? V.norm(V.sub(midMcp,wrist)) : null;
-          // openness: mean fingertip->wrist dist / palm size (wrist->midMcp)
-          const palm=wrist&&midMcp? V.len(V.sub(midMcp,wrist))||1e-6 : 1e-6;
-          const tips=[8,12,16,20]; let sum=0,n=0;
-          for(const t of tips){ if(lm[t]){ sum+=V.len(V.sub(lm[t],wrist)); n++; } }
-          const open=n? Math.max(0,Math.min(1,((sum/n)/palm-1.2)/1.3)) : null;
-          out[side]={dir,open,present:true};
-        }
-        return out;
-      }
-
-      // ===== Per-frame feature extraction (world landmarks → body frame) =====
-      function extractFeatures(P, handRes, ts, videoTime){
-        const frame=P?buildBodyFrame(P):null;
-        if(!frame) return {valid:false,t:ts,videoTime};
-        const B={}; for(const k in J){ if(P[J[k]]) B[k]=toBody(P[J[k]],frame); }
-        const seg=(a,b)=> (B[a]&&B[b])? V.norm(V.sub(B[b],B[a])) : null;
-        const dirs={
-          LupperArm:seg('Lsho','Lelb'), LforeArm:seg('Lelb','Lwri'),
-          RupperArm:seg('Rsho','Relb'), RforeArm:seg('Relb','Rwri'),
-          Lthigh:seg('Lhip','Lkne'), Lshin:seg('Lkne','Lank'),
-          Rthigh:seg('Rhip','Rkne'), Rshin:seg('Rkne','Rank'),
-          spine:(B.Lsho&&B.Rsho&&B.Lhip&&B.Rhip)? V.norm(V.sub(V.mid(B.Lsho,B.Rsho),V.mid(B.Lhip,B.Rhip))) : null
-        };
-        const angles={
-          Lelbow:jointAngle(P[J.Lsho],P[J.Lelb],P[J.Lwri]), Relbow:jointAngle(P[J.Rsho],P[J.Relb],P[J.Rwri]),
-          Lknee:jointAngle(P[J.Lhip],P[J.Lkne],P[J.Lank]), Rknee:jointAngle(P[J.Rhip],P[J.Rkne],P[J.Rank])
-        };
-        const yaw=v=> v? Math.atan2(v.z,v.x)*180/Math.PI : null;
-        const shoVec=(B.Lsho&&B.Rsho)?V.sub(B.Lsho,B.Rsho):null, hipVec=(B.Lhip&&B.Rhip)?V.sub(B.Lhip,B.Rhip):null;
-        const shoulderHipTwist=(shoVec&&hipVec)? (yaw(shoVec)-yaw(hipVec)) : null;
-        const torsoRoll=dirs.spine? Math.atan2(dirs.spine.x,dirs.spine.y)*180/Math.PI : null;
-        let legLen=0,nl=0;
-        if(B.Lhip&&B.Lkne&&B.Lank){legLen+=V.len(V.sub(B.Lhip,B.Lkne))+V.len(V.sub(B.Lkne,B.Lank));nl++;}
-        if(B.Rhip&&B.Rkne&&B.Rank){legLen+=V.len(V.sub(B.Rhip,B.Rkne))+V.len(V.sub(B.Rkne,B.Rank));nl++;}
-        legLen=nl?legLen/nl:1;
-        const hipMid=(B.Lhip&&B.Rhip)?V.mid(B.Lhip,B.Rhip):(B.Lhip||B.Rhip||{y:0});
-        const hipHeight=legLen? hipMid.y/legLen : 0;
-        const h=handMetrics(handRes,frame);
-        return {valid:true,t:ts,videoTime,dirs,angles,shoulderHipTwist,torsoRoll,hipHeight,
-          LhandDir:h.L.dir,RhandDir:h.R.dir,LhandOpen:h.L.open,RhandOpen:h.R.open,
-          LhandPresent:h.L.present,RhandPresent:h.R.present,
-          wL:B.Lwri||null,wR:B.Rwri||null,ankL:B.Lank||null,ankR:B.Rank||null};
-      }
-
-      // Mirror a learner's features across the sagittal plane (left<->right, negate x)
-      function mirrorFeatures(ff){
-        if(!ff||!ff.valid) return ff;
-        const fx=v=> v? {x:-v.x,y:v.y,z:v.z} : null;
-        const sw=(a,b)=>[ff[b],ff[a]];
-        const m={...ff};
-        [m.LupperArm,m.RupperArm]=[fx(ff.dirs.RupperArm),fx(ff.dirs.LupperArm)];
-        m.dirs={
-          LupperArm:fx(ff.dirs.RupperArm),RupperArm:fx(ff.dirs.LupperArm),
-          LforeArm:fx(ff.dirs.RforeArm),RforeArm:fx(ff.dirs.LforeArm),
-          Lthigh:fx(ff.dirs.Rthigh),Rthigh:fx(ff.dirs.Lthigh),
-          Lshin:fx(ff.dirs.Rshin),Rshin:fx(ff.dirs.Lshin),
-          spine:fx(ff.dirs.spine)
-        };
-        m.angles={Lelbow:ff.angles.Relbow,Relbow:ff.angles.Lelbow,Lknee:ff.angles.Rknee,Rknee:ff.angles.Lknee};
-        m.shoulderHipTwist=ff.shoulderHipTwist!=null?-ff.shoulderHipTwist:null;
-        m.torsoRoll=ff.torsoRoll!=null?-ff.torsoRoll:null;
-        [m.LhandDir,m.RhandDir]=[fx(ff.RhandDir),fx(ff.LhandDir)];
-        [m.LhandOpen,m.RhandOpen]=[ff.RhandOpen,ff.LhandOpen];
-        [m.LhandPresent,m.RhandPresent]=[ff.RhandPresent,ff.LhandPresent];
-        [m.wL,m.wR]=[fx(ff.wR),fx(ff.wL)];
-        return m;
-      }
-
-      // ===== Feature catalogue: how to read error + base dance weight + priority =====
-      // kind 'dir' (angular distance of unit vectors), 'ang' (deg), 'scalar' (signed deg/units)
-      const FEATURES = [
-        {id:'LupperArm',label:'left arm',region:'arms',w:1.6,pri:'HIGH',kind:'dir',get:f=>f.dirs.LupperArm,side:'L'},
-        {id:'RupperArm',label:'right arm',region:'arms',w:1.6,pri:'HIGH',kind:'dir',get:f=>f.dirs.RupperArm,side:'R'},
-        {id:'LforeArm',label:'left forearm',region:'arms',w:1.4,pri:'HIGH',kind:'dir',get:f=>f.dirs.LforeArm,side:'L'},
-        {id:'RforeArm',label:'right forearm',region:'arms',w:1.4,pri:'HIGH',kind:'dir',get:f=>f.dirs.RforeArm,side:'R'},
-        {id:'Lelbow',label:'left elbow',region:'arms',w:1.1,pri:'MED',kind:'ang',get:f=>f.angles.Lelbow,side:'L'},
-        {id:'Relbow',label:'right elbow',region:'arms',w:1.1,pri:'MED',kind:'ang',get:f=>f.angles.Relbow,side:'R'},
-        {id:'Lthigh',label:'left leg',region:'legs',w:1.5,pri:'HIGH',kind:'dir',get:f=>f.dirs.Lthigh,side:'L'},
-        {id:'Rthigh',label:'right leg',region:'legs',w:1.5,pri:'HIGH',kind:'dir',get:f=>f.dirs.Rthigh,side:'R'},
-        {id:'Lshin',label:'left shin',region:'legs',w:1.3,pri:'HIGH',kind:'dir',get:f=>f.dirs.Lshin,side:'L'},
-        {id:'Rshin',label:'right shin',region:'legs',w:1.3,pri:'HIGH',kind:'dir',get:f=>f.dirs.Rshin,side:'R'},
-        {id:'Lknee',label:'left knee',region:'legs',w:1.1,pri:'MED',kind:'ang',get:f=>f.angles.Lknee,side:'L'},
-        {id:'Rknee',label:'right knee',region:'legs',w:1.1,pri:'MED',kind:'ang',get:f=>f.angles.Rknee,side:'R'},
-        {id:'spine',label:'spine',region:'torso',w:1.4,pri:'HIGH',kind:'dir',get:f=>f.dirs.spine},
-        {id:'twist',label:'torso twist',region:'torso',w:2.2,pri:'HIGH',kind:'scalar',get:f=>f.shoulderHipTwist},
-        {id:'roll',label:'torso roll',region:'torso',w:1.8,pri:'HIGH',kind:'scalar',get:f=>f.torsoRoll},
-        {id:'hipHeight',label:'level',region:'level',w:1.4,pri:'HIGH',kind:'scalar',scaleFix:120,get:f=>f.hipHeight},
-        {id:'LhandDir',label:'left hand',region:'hands',w:1.1,pri:'MED',kind:'dir',get:f=>f.LhandPresent?f.LhandDir:null,side:'L'},
-        {id:'RhandDir',label:'right hand',region:'hands',w:1.1,pri:'MED',kind:'dir',get:f=>f.RhandPresent?f.RhandDir:null,side:'R'},
-        {id:'LhandOpen',label:'left hand',region:'hands',w:0.9,pri:'MED',kind:'scalar',scaleFix:90,get:f=>f.LhandPresent?f.LhandOpen:null,side:'L'},
-        {id:'RhandOpen',label:'right hand',region:'hands',w:0.9,pri:'MED',kind:'scalar',scaleFix:90,get:f=>f.RhandPresent?f.RhandOpen:null,side:'R'}
-      ];
-      // Signed-error → imperative cue. err sign: + = you greater than tutorial.
-      function cueFor(id, err){
-        const s=err>0?1:-1;
-        switch(id){
-          case 'Lelbow': case 'Relbow': { const side=id[0]==='L'?'left':'right'; return s>0?`bend your ${side} elbow more`:`straighten your ${side} arm`; }
-          case 'Lknee': case 'Rknee': { const side=id[0]==='L'?'left':'right'; return s>0?`bend your ${side} knee`:`extend your ${side} leg`; }
-          case 'LupperArm': case 'LforeArm': return 'fix your left arm line';
-          case 'RupperArm': case 'RforeArm': return 'fix your right arm line';
-          case 'Lthigh': case 'Lshin': return 'adjust your left leg';
-          case 'Rthigh': case 'Rshin': return 'adjust your right leg';
-          case 'spine': return 'lengthen your spine, stand tall';
-          case 'twist': return s>0?'ease off the torso twist':'rotate your torso more';
-          case 'roll': return s>0?'control the body roll':'roll your torso more into it';
-          case 'hipHeight': return s>0?'get lower, sink into your level':'rise up, lift your level';
-          case 'LhandDir': return 'angle your left hand to match';
-          case 'RhandDir': return 'angle your right hand to match';
-          case 'LhandOpen': return s>0?'soften/close your left hand':'open your left hand';
-          case 'RhandOpen': return s>0?'soften/close your right hand':'open your right hand';
-          default: return 'match the tutorial more closely';
-        }
-      }
-
-      // ===== Compare two feature frames → signed per-feature error + weighted score =====
-      // weightMul: optional {region:multiplier} from intent/salience (default 1)
-      function compareFeatures(you, tut, weightMul){
-        if(!you||!tut||!you.valid||!tut.valid) return null;
-        const errs=[]; let wsum=0, werr=0;
-        for(const F of FEATURES){
-          const yv=F.get(you), tv=F.get(tut);
-          if(yv==null||tv==null) continue;
-          let norm, signed;
-          if(F.kind==='dir'){ const a=angBetween(yv,tv); norm=Math.min(1,a/60); // 60deg = full error
-            // sign from vertical component difference (wrist higher/lower) when arms/legs
-            signed=(yv.y-tv.y); }
-          else if(F.kind==='ang'){ const d=yv-tv; norm=Math.min(1,Math.abs(d)/50); signed=d; }
-          else { const d=(yv-tv); norm=Math.min(1,Math.abs(d)*(F.scaleFix?F.scaleFix:60)/60); signed=d; }
-          const mul=(weightMul&&weightMul[F.region])||1;
-          const w=F.w*mul;
-          wsum+=w; werr+=w*norm;
-          errs.push({id:F.id,label:F.label,region:F.region,pri:F.pri,w,norm,signed,
-                     cue:cueFor(F.id,signed)});
-        }
-        if(!wsum) return null;
-        const mean=werr/wsum;
-        const score=Math.max(0,Math.min(100,Math.round(100-mean*120)));
-        return {score, errs, mean};
-      }
-
-      // best of direct vs mirror, honouring the mirror mode setting
-      function compareBest(you, tut, weightMul, mode){
-        if(mode==='direct') return {...compareFeatures(you,tut,weightMul), mirror:false};
-        if(mode==='mirror') return {...compareFeatures(mirrorFeatures(you),tut,weightMul), mirror:true};
-        const a=compareFeatures(you,tut,weightMul);
-        const b=compareFeatures(mirrorFeatures(you),tut,weightMul);
-        if(!a) return b?{...b,mirror:true}:null;
-        if(!b) return {...a,mirror:false};
-        return (b.mean<a.mean-0.04)?{...b,mirror:true}:{...a,mirror:false};
-      }
-
-      // ===== Rolling buffers + motion + tutorial activity salience =====
-      const youBuf=[], tutBuf=[]; const BUF_CAP=48;
-      function pushBuf(buf,ff){ buf.push(ff); if(buf.length>BUF_CAP) buf.shift(); }
-      function recent(buf,ms,now){ return buf.filter(f=>f&&f.valid&&now-f.t<=ms); }
-      // overall + per-region motion energy of the tutorial over the last ~900ms
-      function tutorialActivity(now){
-        const win=recent(tutBuf,900,now); if(win.length<3) return null;
-        const speed=(a,b,key)=>{ const pa=a[key],pb=b[key]; if(!pa||!pb) return 0; const dt=(b.t-a.t)/1000||1/24; return V.len(V.sub(pb,pa))/dt; };
-        let arms=0,legs=0,hands=0,torso=0,amp=0,n=0;
-        for(let i=1;i<win.length;i++){ const a=win[i-1],b=win[i];
-          arms+=(speed(a,b,'wL')+speed(a,b,'wR'))/2;
-          legs+=(speed(a,b,'ankL')+speed(a,b,'ankR'))/2;
-          torso+=Math.abs((b.torsoRoll||0)-(a.torsoRoll||0))+Math.abs((b.shoulderHipTwist||0)-(a.shoulderHipTwist||0));
-          if(b.LhandDir&&a.LhandDir) hands+=angBetween(a.LhandDir,b.LhandDir);
-          if(b.RhandDir&&a.RhandDir) hands+=angBetween(a.RhandDir,b.RhandDir);
-          n++;
-        }
-        if(!n) return null;
-        arms/=n; legs/=n; hands/=n; torso/=n; amp=arms+legs;
-        const stillness=Math.max(0,1-(amp/2.5));
-        const nz=v=>Math.max(0,Math.min(1,v));
-        return { arms:nz(arms/2.5), legs:nz(legs/2.5), hands:nz(hands/25), torso:nz(torso/30), amp:nz(amp/2.5), stillness };
-      }
-      // turn activity into per-region weight multipliers (busy region ↑, holds ↑ line precision)
-      function salienceWeights(act){
-        if(!act) return null;
-        return {
-          arms:1+0.9*act.arms, legs:1+0.9*act.legs, hands:1+1.2*act.hands,
-          torso:1+1.0*act.torso, level:1+0.6*act.amp,
-          // a held line (low motion) boosts line precision a bit
-          linesBoost:1+0.8*act.stillness
-        };
-      }
-      // timing lag: best-matching tutorial frame within the last ~500ms
-      function alignLag(you, now, weightMul, mode){
-        const cands=recent(tutBuf,520,now); if(!cands.length) return null;
-        let best=null;
-        for(const tf of cands){ const c=compareBest(you,tf,weightMul,mode); if(c&&(best==null||c.mean<best.cmp.mean)) best={tf,cmp:c,lag:now-tf.t}; }
-        return best;
-      }
-
-      // ===== Choreographic intent: cached map (tiers 1-2) over salience (tier 3) =====
-      let intentMap=null; // { videoId, segments:[{t0,t1,focus,kind}] } for the current tutorial
-      let accentTimes=null; // [sec] audio accents (tier 2)
-      function intentSegmentAt(time){ if(!intentMap||!intentMap.segments) return null; return intentMap.segments.find(s=>time>=s.t0&&time<s.t1)||null; }
-      function nearAccent(time){ if(!accentTimes||!accentTimes.length) return false; for(const a of accentTimes){ if(Math.abs(a-time)<0.18) return true; } return false; }
-      function currentIntentLabel(time){ const s=intentSegmentAt(time); if(!s) return null; return s.focus + (s.kind==='accent'?' (hit)':s.kind==='transition'?' (transition)':''); }
-      function intentWeights(time, sal){
-        const w={arms:1,legs:1,torso:1,level:1,hands:1};
-        if(sal){ const lb=sal.linesBoost||1; w.arms=sal.arms*lb; w.legs=sal.legs*lb; w.torso=sal.torso*lb; w.level=sal.level; w.hands=sal.hands; }
-        const seg=intentSegmentAt(time);
-        if(seg){ const f=seg.focus;
-          if(f==='footwork') w.legs*=1.6; else if(f==='hands') w.hands*=1.8;
-          else if(f==='isolation') w.torso*=1.6; else if(f==='lines'){ w.arms*=1.4; w.legs*=1.3; }
-          if(seg.kind==='accent'){ for(const k in w) w[k]*=1.3; } // nail the hit
-        }
-        if(nearAccent(time)){ for(const k in w) w[k]*=1.2; } // precision spikes on the beat
-        return w;
-      }
-
-      // --- Tier 2: audio onset/accent detection on the tutorial track ---
-      let audioCtx=null, analyser=null, audioData=null, audioReady=false, prevSpec=null, fluxAvg=0;
-      function setupAudio(){
-        if(audioReady){ if(audioCtx&&audioCtx.state==='suspended'){ try{audioCtx.resume();}catch(e){} } return; }
-        audioReady=true;
-        try{
-          audioCtx=new (window.AudioContext||window.webkitAudioContext)();
-          const src=audioCtx.createMediaElementSource(video);
-          analyser=audioCtx.createAnalyser(); analyser.fftSize=1024;
-          src.connect(analyser); analyser.connect(audioCtx.destination);
-          audioData=new Uint8Array(analyser.frequencyBinCount); accentTimes=[];
-        }catch(e){ analyser=null; }
-      }
-      function audioTick(){
-        if(!analyser||video.paused) return;
-        analyser.getByteFrequencyData(audioData);
-        let flux=0; if(prevSpec){ for(let i=0;i<audioData.length;i++){ const d=audioData[i]-prevSpec[i]; if(d>0) flux+=d; } }
-        prevSpec=audioData.slice();
-        fluxAvg=fluxAvg*0.9+flux*0.1;
-        if(flux>fluxAvg*1.6 && flux>700){ const t=video.currentTime; const last=accentTimes&&accentTimes[accentTimes.length-1];
-          if(last==null||t-last>0.22){ (accentTimes=accentTimes||[]).push(t); if(accentTimes.length>240) accentTimes.shift(); } }
-      }
-
-      // --- Tier 1: Gemini multimodal intent-map (cached per video) ---
-      const obsFrames=[]; let obsLastFrame=0; const frameCanvas=document.createElement('canvas');
-      function captureFrame(){
-        if(!video.videoWidth) return;
-        const w=256, h=Math.max(1,Math.round(256*video.videoHeight/video.videoWidth));
-        frameCanvas.width=w; frameCanvas.height=h;
-        try{ frameCanvas.getContext('2d').drawImage(video,0,0,w,h);
-          obsFrames.push({t:+video.currentTime.toFixed(1), data:frameCanvas.toDataURL('image/jpeg',0.6).split(',')[1]});
-          if(obsFrames.length>12) obsFrames.shift();
-        }catch(e){}
-      }
-      const INTENT_SYS='You are a choreography analyst. You see frames sampled from a short dance-tutorial segment, with their timestamps (seconds). Output ONLY compact JSON: {"segments":[{"t0":<sec>,"t1":<sec>,"focus":"footwork|hands|lines|isolation|energy","kind":"accent|groove|transition"}]}. Use 2-5 segments covering the timestamp range. "accent"=a hit/key move to nail; "groove"/"transition"=looser. No prose, no markdown.';
-      async function fetchIntentMap(){
-        const apiKey=(stateManager&&stateManager.state.geminiApiKey)||'';
-        if(!apiKey || obsFrames.length<3) return;
-        const vid=lastVideoId;
-        const parts=[{text:'Frame timestamps (s): '+obsFrames.map(f=>f.t).join(', ')}];
-        for(const f of obsFrames) parts.push({inlineData:{mimeType:'image/jpeg',data:f.data}});
-        try{
-          const url=`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-          const body={systemInstruction:{parts:[{text:INTENT_SYS}]},contents:[{parts}]};
-          const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-          const j=await res.json();
-          let txt=(j.candidates&&j.candidates[0]&&j.candidates[0].content&&j.candidates[0].content.parts&&j.candidates[0].content.parts[0].text)||'';
-          txt=txt.replace(/```json|```/g,'').trim();
-          const parsed=JSON.parse(txt);
-          if(parsed&&Array.isArray(parsed.segments)) intentMap={videoId:vid,segments:parsed.segments};
-        }catch(e){ /* keep salience fallback */ }
-      }
-
-      // pose connection subset per feature, for the red "fix this limb" highlight
-      function connFor(id){
-        const c=(a,b)=>({start:a,end:b});
-        const m={
-          LupperArm:[c(11,13)],Lelbow:[c(11,13),c(13,15)],LforeArm:[c(13,15)],
-          RupperArm:[c(12,14)],Relbow:[c(12,14),c(14,16)],RforeArm:[c(14,16)],
-          Lthigh:[c(23,25)],Lknee:[c(23,25),c(25,27)],Lshin:[c(25,27)],
-          Rthigh:[c(24,26)],Rknee:[c(24,26),c(26,28)],Rshin:[c(26,28)],
-          spine:[c(11,23),c(12,24),c(11,12),c(23,24)],twist:[c(11,12),c(23,24)],roll:[c(11,23),c(12,24)],
-          hipHeight:[c(23,24)],LhandDir:[c(13,15)],RhandDir:[c(14,16)],LhandOpen:[c(13,15)],RhandOpen:[c(14,16)]
-        };
-        return m[id]||null;
-      }
-
-      async function ensureModels() {
-        if (camLandmarker && tutLandmarker) return true;
-        setStatus('Loading pose + hand models…');
-        const vision = await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/vision_bundle.mjs');
-        const { PoseLandmarker, HandLandmarker, FilesetResolver, DrawingUtils } = vision;
-        const resolver = await FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm');
-        const poseOpts = { baseOptions: { modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task' }, runningMode: 'VIDEO', numPoses: 1 };
-        camLandmarker = await PoseLandmarker.createFromOptions(resolver, poseOpts);
-        tutLandmarker = await PoseLandmarker.createFromOptions(resolver, poseOpts);
-        POSE_CONN = PoseLandmarker.POSE_CONNECTIONS;
-        drawer = new DrawingUtils(els.canvas.getContext('2d'));
-        drawer2 = new DrawingUtils(tutCanvas.getContext('2d'));
-        // hands (optional — degrade to pose-only on failure)
-        try {
-          const handOpts = { baseOptions: { modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task' }, runningMode: 'VIDEO', numHands: 2 };
-          camHands = await HandLandmarker.createFromOptions(resolver, handOpts);
-          tutHands = await HandLandmarker.createFromOptions(resolver, handOpts);
-          HAND_CONN = HandLandmarker.HAND_CONNECTIONS;
-        } catch (e) { camHands = tutHands = null; }
-        return true;
-      }
-
-      // cached latest detections (so off-cadence ticks still draw/compare)
-      let lastYouLm=null,lastTutLm=null,lastCamHandRes=null,lastTutHandRes=null;
-      let lastInfer=0, frameN=0, youFF=null, tutFF=null;
-
-      function drawPose(d, canvas, lm, handRes, highlightId){
-        const ctx=canvas.getContext('2d');
-        canvas.width=canvas._w||canvas.width; ctx.clearRect(0,0,canvas.width,canvas.height);
-        if(lm && POSE_CONN){ d.drawConnectors(lm,POSE_CONN,{color:'#8a9b6e',lineWidth:3}); d.drawLandmarks(lm,{color:'#fff',radius:2.5}); }
-        if(handRes && handRes.landmarks && HAND_CONN){ for(const h of handRes.landmarks){ d.drawConnectors(h,HAND_CONN,{color:'#bcdc9a',lineWidth:2}); } }
-        if(lm && highlightId){ const sub=connFor(highlightId); if(sub) d.drawConnectors(lm,sub,{color:'#ff4d4d',lineWidth:6}); }
-      }
-
-      function loop() {
-        if (!running) return;
-        const now=performance.now();
-        if(now-lastInfer < 41){ rafId=requestAnimationFrame(loop); return; } // ~24fps gate
-        lastInfer=now; frameN++;
-        audioTick();
-        const cw=els.cam.videoWidth||320, ch=els.cam.videoHeight||240;
-        els.canvas.width=cw; els.canvas.height=ch; els.canvas._w=cw;
-        try {
-          // --- webcam: pose every tick, hands every 2nd ---
-          if(els.cam.videoWidth){
-            const r=camLandmarker.detectForVideo(els.cam, now); lastYouLm=(r.landmarks&&r.landmarks[0])||null;
-            if(camHands && frameN%2===0){ try{ lastCamHandRes=camHands.detectForVideo(els.cam, now); }catch(e){} }
-            youFF = lastYouLm? extractFeatures(lastYouLm, lastCamHandRes, now, null) : null;
-          }
-          // --- tutorial: pose every 2nd tick, hands every 4th; skip while paused ---
-          if(video && !video.paused && video.videoWidth){
-            tutCanvas._w=video.videoWidth; tutCanvas.width=video.videoWidth; tutCanvas.height=video.videoHeight;
-            tutCanvas.style.transform = video.classList.contains('mirror-video') ? 'scaleX(-1)' : 'none';
-            if(frameN%2===1){ const r2=tutLandmarker.detectForVideo(video, now+1); lastTutLm=(r2.landmarks&&r2.landmarks[0])||null;
-              if(tutHands && frameN%4===1){ try{ lastTutHandRes=tutHands.detectForVideo(video, now+1); }catch(e){} }
-              tutFF = lastTutLm? extractFeatures(lastTutLm, lastTutHandRes, now, video.currentTime) : null;
-              if(tutFF && tutFF.valid) pushBuf(tutBuf, tutFF);
-            }
-          }
-          if(youFF && youFF.valid) pushBuf(youBuf, youFF);
-          // draw (with red highlight if active)
-          const hl=(redLimb && now<redLimbUntil)?redLimb:null;
-          drawPose(drawer, els.canvas, lastYouLm, lastCamHandRes, hl);
-          if(video && !video.paused) drawPose(drawer2, tutCanvas, lastTutLm, lastTutHandRes, null);
-        } catch(e){ /* transient */ }
-
-        // --- compare (facing-invariant, salience-weighted, lag-aligned, mirror-aware) ---
-        if(youFF && youFF.valid && tutBuf.length){
-          const act=tutorialActivity(now); const sal=salienceWeights(act);
-          const wmul=intentWeights(video?video.currentTime:0, sal); // intent tiers (falls back to sal)
-          const mode=coachPrefs.mirror;
-          const aligned=alignLag(youFF, now, wmul, mode);
-          const cmp=aligned?aligned.cmp:null;
-          if(cmp){
-            lastScore=cmp.score; lastErrs=cmp.errs; lastMirror=cmp.mirror; lastLagMs=aligned.lag;
-            els.score.textContent=cmp.score+'%';
-            els.score.style.color = cmp.score>=80?'#b7f5b0':cmp.score>=55?'#ffe08a':'#ffb0b0';
-            if(els.timing) els.timing.textContent = aligned.lag>200?'behind':aligned.lag<-150?'rushing':'on beat';
-            proactiveTick(cmp, aligned.lag);
-            observeSample(cmp, aligned.lag);
-          }
-        } else { els.score.textContent = (tutBuf.length?'You: —':'Play tutorial'); }
-        rafId = requestAnimationFrame(loop);
-      }
-
-      async function startCamera() {
-        if (running) { stopCamera(); return; }
-        try {
-          els.start.disabled = true;
-          camStream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: false });
-          els.cam.srcObject = camStream;
-          await els.cam.play().catch(() => {});
-          await ensureModels();
-          setupAudio();
-          youBuf.length=0; tutBuf.length=0; for(const k in persist) delete persist[k];
-          running = true; lastInfer=0; frameN=0;
-          tutCanvas.style.display = 'block';
-          els.start.innerHTML = '<i class="fas fa-stop"></i> Stop camera';
-          setStatus(camHands ? 'Coaching live — pose + hands.' : 'Coaching live (pose only — hands unavailable).');
-          loop();
-        } catch (err) {
-          setStatus('Camera/model error: ' + (err.message || err) + ' (needs camera permission + internet for the models).');
-        } finally {
-          els.start.disabled = false;
-        }
-      }
-      function stopCamera() {
-        running = false; observing=false;
-        if (rafId) cancelAnimationFrame(rafId);
-        if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; }
-        try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch(e){}
-        els.cam.srcObject = null;
-        try { const c = tutCanvas.getContext('2d'); c.clearRect(0, 0, tutCanvas.width, tutCanvas.height); } catch (e) {}
-        tutCanvas.style.display = 'none';
-        redLimb=null; youBuf.length=0; tutBuf.length=0;
-        els.start.innerHTML = '<i class="fas fa-video"></i> Start camera';
-        els.advice.innerHTML = '<i class="fas fa-comment-dots"></i> Coach me';
-        setStatus('Camera stopped.');
-      }
-
-      // ===== local rule-based tips (fallback) from the latest/observed errors =====
-      function tipsFrom(problems){
-        if(!problems || !problems.length) return lastScore!=null ? `Looking good (${lastScore}%)! Keep that energy.` : 'Start the camera and play a tutorial.';
-        return (lastScore!=null?`Match ${lastScore}%. `:'')+'Focus on:\n'+problems.slice(0,3).map(p=>'• '+p.cue).join('\n');
-      }
-      function ruleBasedTips(){
-        const probs=[...lastErrs].filter(e=>e.norm>0.3).sort((a,b)=>b.norm*b.w-a.norm*a.w).map(e=>({cue:e.cue}));
-        return tipsFrom(probs);
-      }
-
-      // ===== "Coach me" = 15s observation → expert Gemini =====
-      let observing=false, obsErrs=[], obsStart=0, obsLagSum=0, obsScoreSum=0, obsN=0, obsLastSample=0;
-      function startObservation(){
-        if(observing){ finishObservation(); return; }
-        if(!running){ setStatus('Start the camera first.'); return; }
-        observing=true; obsErrs=[]; obsStart=performance.now(); obsLagSum=0; obsScoreSum=0; obsN=0; obsLastSample=0;
-        obsFrames.length=0; obsLastFrame=0;
-        els.advice.innerHTML='<i class="fas fa-stop"></i> Observing…';
-        els.feedback.textContent='Watching for ~15s — dance the section!';
-      }
-      function observeSample(cmp, lagMs){
-        if(!observing||!cmp) return;
-        const now=performance.now();
-        if(now-obsLastSample<125) return; obsLastSample=now;
-        if(now-obsLastFrame>1400){ obsLastFrame=now; captureFrame(); }
-        obsScoreSum+=cmp.score; obsLagSum+=lagMs; obsN++;
-        for(const e of cmp.errs){ if(e.norm>0.25){ let a=obsErrs.find(x=>x.id===e.id); if(!a){a={id:e.id,label:e.label,region:e.region,sum:0,signSum:0,n:0};obsErrs.push(a);} a.sum+=e.norm*e.w; a.signSum+=e.signed; a.n++; } }
-        const elapsed=now-obsStart;
-        if(elapsed>4000){ const worst=obsErrs.slice().sort((a,b)=>b.sum-a.sum)[0]; if(worst && worst.n/Math.max(1,obsN)>0.85){ finishObservation(); return; } }
-        if(elapsed>15000) finishObservation();
-      }
-      async function finishObservation(){
-        if(!observing) return; observing=false;
-        els.advice.innerHTML='<i class="fas fa-comment-dots"></i> Coach me';
-        const top=obsErrs.filter(x=>x.n>0).sort((a,b)=>b.sum-a.sum).slice(0,6).map(x=>({
-          part:x.label, region:x.region, severity:+(x.sum/Math.max(1,obsN)).toFixed(2),
-          pctOfTimeWrong:Math.round(100*x.n/Math.max(1,obsN)), correction:cueFor(x.id,x.signSum)
-        }));
-        const avgScore=obsN?Math.round(obsScoreSum/obsN):lastScore;
-        const avgLag=obsN?Math.round(obsLagSum/obsN):0;
-        const intent=currentIntentLabel(video?video.currentTime:0);
-        const summary={ avgMatchPct:avgScore, timing: avgLag>200?'behind the beat':avgLag<-150?'rushing':'on time', mirrored:lastMirror, sectionCharacter:intent||'unknown', topProblems:top };
-        // refresh the cached choreographic intent map for this video (async; improves next run)
-        if(!intentMap || intentMap.videoId!==lastVideoId) fetchIntentMap();
-        await geminiCoach(summary);
-      }
-      const COACH_SYSTEM = 'You are an elite, working dance coach giving a learner prioritized, specific corrections. You receive a STRUCTURED JSON summary of a ~15s comparison between the learner and a tutorial, captured by on-device pose+hand tracking, already normalized so it is invariant to where the learner stands or which way they face. Errors are weighted by what matters in dance. Coach by these priorities IN ORDER: (1) musicality & timing (behind/rushing kills everything), (2) body lines & full extension, (3) dynamics/amplitude/sharpness, (4) isolations & body-rolls, (5) weight/groundedness & level, (6) hand & finger styling. If a sectionCharacter is given, weight that focus. Output: one short encouraging line naming a strength, then 2-4 corrections MOST IMPORTANT FIRST, each a single imperative cue tied to a body part and direction. Reference the data but never dump numbers or jargon. No markdown, no preamble, under 90 words.';
-      async function geminiCoach(summary){
-        const apiKey=(stateManager && stateManager.state.geminiApiKey)||'';
-        if(!apiKey){ els.feedback.textContent=ruleBasedTipsFromSummary(summary)+'\n\n(Add a free Gemini key for richer coaching.)'; return; }
-        els.feedback.textContent='Analyzing your run…';
-        try {
-          const url=`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-          const body={ systemInstruction:{parts:[{text:COACH_SYSTEM}]}, contents:[{parts:[{text:JSON.stringify(summary)}]}] };
-          const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-          const j=await res.json();
-          const txt=j.candidates&&j.candidates[0]&&j.candidates[0].content&&j.candidates[0].content.parts&&j.candidates[0].content.parts[0].text;
-          if(txt){ els.feedback.textContent=txt; if(coachPrefs.audio) speak(txt.split(/[.!?]/)[0]); }
-          else { const q=j.error&&(j.error.status==='RESOURCE_EXHAUSTED'||j.error.code===429); els.feedback.textContent=(q?'Coach is rate-limited — local tips:\n':'')+ruleBasedTipsFromSummary(summary); }
-        } catch(e){ els.feedback.textContent='Offline — local tips:\n'+ruleBasedTipsFromSummary(summary); }
-      }
-      function ruleBasedTipsFromSummary(s){
-        if(!s||!s.topProblems||!s.topProblems.length) return `Solid run (${s?s.avgMatchPct:lastScore}%)! Keep the energy and stay on the beat.`;
-        const t=[`Match ~${s.avgMatchPct}% (${s.timing}).`];
-        s.topProblems.slice(0,3).forEach(p=>t.push('• '+p.correction));
-        return t.join('\n');
-      }
-
-      // ---- wire UI ----
-      // Closing the panel stops the camera so the green light goes off when not in use.
-      function closePanel() { panel.classList.remove('open'); stopCamera(); }
-      toggle.addEventListener('click', () => {
-        if (panel.classList.contains('open')) closePanel();
-        else panel.classList.add('open');
-      });
-      els.close.addEventListener('click', closePanel);
-      els.start.addEventListener('click', startCamera);
-      els.advice.addEventListener('click', startObservation);
-      els.key.addEventListener('click', () => {
-        const cur = (stateManager && stateManager.state.geminiApiKey) || '';
-        const k = prompt('Paste your free Gemini API key (from aistudio.google.com). Leave blank to clear:', cur);
-        if (k === null) return;
-        if (stateManager) { stateManager.state.geminiApiKey = k.trim(); stateManager.saveStateSoon(); }
-        flashNotification(k.trim() ? 'Gemini key saved' : 'Gemini key cleared');
-      });
-
-      // ---- live controls: timing badge + channel toggles + mirror mode ----
-      function saveCoachPrefs(){ if(stateManager){ stateManager.state.coachPrefs={...coachPrefs}; stateManager.saveStateSoon(); } }
-      els.timing = document.createElement('div');
-      els.timing.className = 'coach-score';
-      els.timing.style.left = 'auto'; els.timing.style.right = '8px'; els.timing.textContent = '—';
-      panel.querySelector('.coach-cam-wrap').appendChild(els.timing);
-
-      const ctl = document.createElement('div');
-      ctl.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px;';
-      function chip(label, key){
-        const b = document.createElement('button');
-        b.textContent = label;
-        b.style.cssText = 'border:none;border-radius:12px;padding:4px 10px;cursor:pointer;font-family:Poppins,sans-serif;font-size:.72rem;';
-        const paint = () => { b.style.background = coachPrefs[key] ? '#8a9b6e' : '#f0ece4'; b.style.color = coachPrefs[key] ? '#fff' : '#6b7280'; };
-        paint();
-        b.addEventListener('click', () => { coachPrefs[key] = !coachPrefs[key]; paint(); saveCoachPrefs(); if(key==='audio' && !coachPrefs.audio){ try{ window.speechSynthesis.cancel(); }catch(e){} } });
-        return b;
-      }
-      ctl.appendChild(chip('Speak','audio'));
-      ctl.appendChild(chip('Text','text'));
-      ctl.appendChild(chip('Highlight','highlight'));
-      const mir = document.createElement('select');
-      mir.style.cssText = 'border-radius:12px;padding:3px 6px;font-size:.72rem;border:1px solid #d8d1b9;background:#fff;color:#374151;';
-      ['auto','direct','mirror'].forEach(v => { const o = document.createElement('option'); o.value = v; o.textContent = 'Mirror: ' + v; mir.appendChild(o); });
-      mir.value = coachPrefs.mirror;
-      mir.addEventListener('change', () => { coachPrefs.mirror = mir.value; saveCoachPrefs(); });
-      ctl.appendChild(mir);
-      panel.querySelector('.coach-actions').before(ctl);
-
-      window.addEventListener('beforeunload', stopCamera);
-
-      // debug/verification hook (harmless; used for headless logic tests)
-      window.__coach = { extractFeatures, compareFeatures, compareBest, mirrorFeatures, buildBodyFrame, cueFor, intentWeights, salienceWeights, FEATURES };
-    })();
 
     // ============================================================================
     // MIRROR SIDE-BY-SIDE: a synced, mirrored copy of the tutorial in the corner,
